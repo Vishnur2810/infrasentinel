@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>InfraSentinel</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: operations console — sector bar, KPI strip, ranked findings beside score breakdown, full-width dependency map, remediation ledger */
+:root{
+  --bg:#F3F5F7; --panel:#FFFFFF; --ink:#13202C; --muted:#5B6B7A; --line:#D9E0E6;
+  --accent:#1D4ED8; --accent-soft:#E3EAFD;
+  --crit:#B42318; --crit-soft:#FDE7E5; --high:#C2570C; --high-soft:#FDEEDC;
+  --med:#A16207; --med-soft:#FBF3D5; --low:#2F7D4F; --low-soft:#E2F3E8;
+  --node:#EEF2F5; --edge:#B5C1CC; --graph-bg:#F3F5F7;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E151C; --panel:#151F29; --ink:#E4EAF0; --muted:#93A3B2; --line:#26333F;
+  --accent:#7DA2FF; --accent-soft:#1C2B4F;
+  --crit:#FF7A6E; --crit-soft:#3A1B19; --high:#FFA45C; --high-soft:#3A2614;
+  --med:#E8C04A; --med-soft:#352C12; --low:#6FD39A; --low-soft:#143222;
+  --node:#1C2833; --edge:#3A4A58; --graph-bg:#0E151C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E151C; --panel:#151F29; --ink:#E4EAF0; --muted:#93A3B2; --line:#26333F;
+  --accent:#7DA2FF; --accent-soft:#1C2B4F;
+  --crit:#FF7A6E; --crit-soft:#3A1B19; --high:#FFA45C; --high-soft:#3A2614;
+  --med:#E8C04A; --med-soft:#352C12; --low:#6FD39A; --low-soft:#143222;
+  --node:#1C2833; --edge:#3A4A58; --graph-bg:#0E151C; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto;padding:20px 16px 48px;display:grid;gap:18px}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:26px;font-weight:700}
+h2{font-size:18px;font-weight:600}
+.eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.brand{display:flex;gap:12px;align-items:center}
+.mark{width:34px;height:34px;border-radius:8px;background:var(--accent);display:grid;place-items:center}
+.mark svg{width:20px;height:20px}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:transparent;color:var(--ink);font:500 13px var(--f-body);padding:8px 14px;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--panel)}
+.seg button:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.notice{font-size:12px;color:var(--muted);border:1px dashed var(--line);border-radius:6px;padding:6px 10px;background:var(--panel)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kpi .v{font:600 28px var(--f-mono);font-variant-numeric:tabular-nums;line-height:1.2}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--node)}
+tr.row.sel td{background:var(--accent-soft)}
+.pill{display:inline-block;font:600 11px var(--f-mono);padding:2px 7px;border-radius:4px;letter-spacing:.03em;white-space:nowrap}
+.p-critical{background:var(--crit-soft);color:var(--crit)}
+.p-high{background:var(--high-soft);color:var(--high)}
+.p-medium{background:var(--med-soft);color:var(--med)}
+.p-low{background:var(--low-soft);color:var(--low)}
+.score{font:600 15px var(--f-mono)}
+.src{font:400 11px var(--f-mono);color:var(--muted)}
+.bars{display:grid;gap:10px;margin:14px 0}
+.bar{display:grid;grid-template-columns:110px 1fr 74px;gap:10px;align-items:center;font-size:13px}
+.track{height:10px;background:var(--node);border-radius:5px;overflow:hidden}
+.fill{height:100%;background:var(--accent);border-radius:5px;transition:width .4s}
+.fill.unk{background:repeating-linear-gradient(45deg,var(--muted) 0 4px,transparent 4px 8px)}
+.formula{font:500 13px var(--f-mono);background:var(--node);border-radius:6px;padding:10px 12px;overflow-x:auto;white-space:nowrap}
+.big{font:600 44px var(--f-mono);line-height:1}
+.explain{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;display:grid;gap:8px}
+.explain p{margin:0;max-width:65ch}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--panel);font:600 13px var(--f-body);padding:8px 14px;border-radius:6px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+select,input[type=text]{font:13px var(--f-body);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 9px;max-width:100%}
+.simbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.graph{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.graph svg{display:block;min-width:760px;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-top:10px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px;border:1px solid var(--edge)}
+.simout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:14px}
+.scenario{border-left:3px solid var(--high);background:var(--high-soft);padding:8px 12px;border-radius:0 6px 6px 0;font-size:13px}
+ul.affected{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+ul.affected li{display:flex;gap:10px;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:6px}
+.path{font:400 11px var(--f-mono);color:var(--muted)}
+.status{font:600 11px var(--f-mono);padding:2px 7px;border-radius:4px;white-space:nowrap}
+.s-open{background:var(--crit-soft);color:var(--crit)}
+.s-prog{background:var(--med-soft);color:var(--med)}
+.s-fixed{background:var(--accent-soft);color:var(--accent)}
+.s-ver{background:var(--low-soft);color:var(--low)}
+.evrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.evrow input{flex:1 1 160px;min-width:0}
+.err{color:var(--crit);font-size:12px}
+.ok{color:var(--low);font-size:12px}
+footer{font-size:12px;color:var(--muted)}
+g.node{cursor:pointer}
+.rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px 22px}
+.rule{display:grid;grid-template-columns:1fr 40px;gap:2px 8px;align-items:center;font-size:13px}
+.rule input{grid-column:1/2;width:100%;accent-color:var(--accent)}
+.rule label{grid-column:1/-1}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;border:1px dashed var(--med);color:var(--med);border-radius:4px;padding:2px 8px}
+.ba{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px;display:grid;gap:10px}
+.good{color:var(--low);font-weight:600}
+.same{color:var(--muted)}
+.rec{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 12px;border-radius:0 6px 6px 0;margin-bottom:12px;max-width:80ch}
+.cmp td:first-child{font-weight:600;white-space:nowrap}
+.cov{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px}
+.cv{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:4px;background:var(--panel)}
+.cv.hit{border-color:var(--accent);background:var(--accent-soft)}
+.cv .n{font:600 11px var(--f-mono);color:var(--muted)}
+.cv .t{font-weight:600;font-size:13px;line-height:1.3}
+.cv .c{font:600 12px var(--f-mono);color:var(--accent)}
+.cv .c.zero{color:var(--muted);font-weight:400}
+.catchip{display:inline-block;font:600 11px var(--f-mono);background:var(--node);color:var(--muted);border-radius:4px;padding:1px 7px;margin-top:4px}
+.fix{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:14px;display:grid;gap:8px}
+.lvl{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--f-body);padding:3px 11px;border-radius:999px;width:fit-content}
+.lvl::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.lvl-self{background:var(--low-soft);color:var(--low)}
+.lvl-it{background:var(--med-soft);color:var(--med)}
+.lvl-pro{background:var(--crit-soft);color:var(--crit)}
+ol.steps{margin:2px 0 0;padding-left:22px;display:grid;gap:8px;font-size:14px;max-width:62ch}
+ol.steps li{line-height:1.5}
+.probanner{border-left:3px solid var(--crit);background:var(--crit-soft);padding:9px 12px;border-radius:0 6px 6px 0;font-size:13px;color:var(--crit);font-weight:500;max-width:70ch}
+body.simple .adv{display:none!important}
+body:not(.simple) #simplehint{display:none}
+body.simple #simThis,body.simple .catchip{display:none}
+body.simple .c-risk,body.simple .c-asset{display:none}
+#simplehint{border-style:solid;background:var(--accent-soft);border-color:var(--accent-soft);color:var(--ink)}
+body.simple #findtitle::after{content:"Problems we found"}
+body:not(.simple) #findtitle::after{content:"Findings, ranked by risk"}
+body.simple #whytitle::after{content:"What to do about it"}
+body:not(.simple) #whytitle::after{content:"Why this score"}
+@media (max-width:900px){.grid2,.simout{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
+body{margin:0}
+.ai{background:var(--accent-soft);border-radius:6px;padding:10px 12px;white-space:pre-wrap;font-size:13px;max-width:70ch}
+.aibadge{font:500 11px var(--f-mono);color:var(--muted)}
+</style>
+</head><body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><circle cx="12" cy="11" r="2.4" fill="#fff"/></svg></div>
+      <div>
+        <h1>InfraSentinel</h1>
+        <div class="muted">Risk and impact console for small organizations · prototype</div>
+      </div>
+    </div>
+    <div style="display:grid;gap:6px;justify-items:end">
+      <div class="eyebrow">View</div>
+      <div class="seg" id="viewmode" role="group" aria-label="View mode"></div>
+      <div class="eyebrow" style="margin-top:4px">Organization profile</div>
+      <div class="seg" id="sector" role="group" aria-label="Organization profile"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <span class="aibadge" id="aistat">AI: checking…</span>
+        <button class="btn" id="scanBtn">Scan this laptop</button>
+      </div>
+    </div>
+  </header>
+  <div class="notice" id="orgline"></div>
+  <div class="notice" id="simplehint">Here are the problems we found, with the most important at the top. Tap a problem to see what it means and how to fix it. Switch to <b>Full</b> view any time for the technical details.</div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panel adv">
+    <div class="panel-head"><div><h2>What matters to this organization</h2><div class="muted" style="font-size:13px">Set how critical each service is. Assets inherit the criticality of the services that depend on them, and every score updates.</div></div><span class="src">Documented rule, no AI guess</span></div>
+    <div class="rules" id="prio"></div>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <div class="panel-head"><h2 id="findtitle"></h2><span class="src adv">Imported from existing tools</span></div>
+      <div class="tbl"><table>
+        <thead><tr><th class="c-risk">Risk</th><th>Finding</th><th class="c-asset">Asset</th><th>Band</th></tr></thead>
+        <tbody id="findings"></tbody>
+      </table></div>
+    </div>
+    <div class="panel" id="detail"></div>
+  </section>
+
+  <section class="panel adv">
+    <div class="panel-head">
+      <div><h2>Dependency map and impact simulation</h2><div class="muted" style="font-size:13px">Arrows show what depends on what. Select an asset and run a hypothetical outage or compromise.</div></div>
+      <div class="simbar">
+        <label for="simAsset" class="eyebrow">Asset</label>
+        <select id="simAsset"></select>
+        <button class="btn" id="runSim">Run simulation</button>
+        <button class="btn ghost" id="clearSim">Clear</button>
+      </div>
+    </div>
+    <div class="graph"><svg id="graph" viewBox="0 0 960 470" role="img" aria-label="Asset dependency graph"></svg></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--node)"></span>Infrastructure / system</span>
+      <span><span class="sw" style="background:var(--accent-soft)"></span>Business service</span>
+      <span><span class="sw" style="background:var(--crit-soft);border-color:var(--crit)"></span>Simulated failure</span>
+      <span><span class="sw" style="background:var(--high-soft);border-color:var(--high)"></span>Possibly affected</span>
+      <span>● dot = open finding on asset</span>
+    </div>
+    <div class="simout" id="simout"></div>
+  </section>
+
+  <section class="panel adv">
+    <div class="panel-head"><div><h2>Which fix first?</h2><div class="muted" style="font-size:13px">Compares risk addressed, services protected, service importance, effort and constraints.</div></div><span class="src">Recommendation, not a guarantee</span></div>
+    <div id="fixrec"></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Rank</th><th>Action</th><th>Risk addressed</th><th>Services protected</th><th>Importance</th><th>Effort</th><th>Constraints</th></tr></thead>
+      <tbody id="fixcmp"></tbody>
+    </table></div>
+    <div class="src" style="margin-top:8px">Value = risk score × (1 + 0.25 per protected service) ÷ effort (low 1, medium 2, high 3). Effort is estimated from the type of fix and should be confirmed by the person doing the work.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Remediation ledger</h2><span class="muted" style="font-size:13px">A task is only verified when evidence is recorded</span></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Priority</th><th>Action</th><th>Owner</th><th>Status</th><th>Verification evidence</th></tr></thead>
+      <tbody id="tasks"></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel adv">
+    <div class="panel-head"><div><h2>Internal weaknesses we watch for</h2>
+     <div class="muted" style="font-size:13px">Your apps sit on well-secured cloud infrastructure, but under the shared-responsibility model these 15 are the organization's own job. InfraSentinel checks all 15; highlighted ones are present in <span id="covorg"></span>.</div></div>
+     <span class="src" id="covcount"></span></div>
+    <div class="cov" id="cov"></div>
+  </section>
+
+  <section class="panel adv">
+    <div class="panel-head"><h2>Where InfraSentinel fits</h2><span class="src">Intended scope, not a claim that other tools lack these</span></div>
+    <div class="tbl"><table class="cmp">
+      <thead><tr><th>Capability</th><th>Existing open-source tools</th><th>InfraSentinel's focus</th></tr></thead>
+      <tbody>
+        <tr><td>Vulnerability detection</td><td>Scanners such as Greenbone</td><td>Import findings instead of rebuilding scanners</td></tr>
+        <tr><td>Finding aggregation</td><td>DefectDojo</td><td>Combine findings with operational service context</td></tr>
+        <tr><td>Attack-path analysis</td><td>BloodHound, for supported environments</td><td>Map broader asset-to-service dependencies</td></tr>
+        <tr><td>Risk scoring</td><td>Some tools and configurations</td><td>Make service importance and scoring assumptions visible</td></tr>
+        <tr><td>Impact simulation</td><td>Depends on the tool and scope</td><td>Explore service disruption and compare fixes before and after</td></tr>
+        <tr><td>AI explanations</td><td>Some tools and editions</td><td>Plain-language consequences for non-specialists, across four organization profiles</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>All organizations, assets and findings on this page are synthetic demo data. Risk formula weights are illustrative and not yet calibrated. Impact paths show possible dependency effects, not predictions of attack spread. No systems were scanned.</footer>
+</div>
+
+<script>
+const SECTORS={
+ college:{label:"College",org:"Riverside Engineering College · 4,500 students · 4 IT staff",
+  nodes:[
+   ["idp","Campus login (LDAP / SSO)",0,85],["srv","Shared app server",0,50],["db","Student records database",0,60],["net","Campus network & Wi-Fi",0,60],
+   ["sis","Student information system",1,60],["portal","Student portal",1,55],["att","Attendance system",1,50],["lms","Learning platform (Moodle)",1,55],["lab","Research lab cluster",1,40],["test","Test / staging server",1,20],
+   ["s_adm","Admissions & records",2,85,1],["s_exam","Exam results",2,95,1],["s_att","Attendance tracking",2,70,1],["s_learn","Courses & assignments",2,80,1],["s_res","Research computing",2,55,1]],
+  edges:[["idp","portal"],["idp","lms"],["idp","att"],["srv","portal"],["srv","att"],["srv","lms"],["db","sis"],["sis","portal"],["net","att"],["net","lab"],["sis","s_adm"],["sis","s_exam"],["portal","s_exam"],["att","s_att"],["lms","s_learn"],["lab","s_res"]],
+  findings:[
+   ["f1","Apache Struts remote code execution (CVE-2023-50164)","srv",9.8,"internal","Greenbone"],
+   ["f2","Same Struts vulnerability on test server","test",9.8,"internal","Greenbone"],
+   ["f3","LDAP allows anonymous bind","idp",7.5,"internal","Nessus import"],
+   ["f4","Student DB backups unencrypted on file share","db",6.5,"internal","Manual review"],
+   ["f5","Portal session cookie missing Secure flag","portal",5.4,"internet","OWASP ZAP"],
+   ["f6","Lab cluster OS support status unknown","lab",6.0,"unknown","Asset inventory"]],
+  owners:["Priya (IT head)","Karthik (sysadmin)","Vendor: CampusERP"]},
+ hospital:{label:"Hospital / clinic",org:"Sunrise Multispeciality Clinic · 40 beds · 3 IT staff",
+  nodes:[
+   ["ad","Active Directory",0,85],["fw","Firewall / VPN",0,80],["db","SQL database server",0,90],["nas","Backup NAS",0,70],
+   ["ehr","Electronic health records",1,95],["lis","Lab information system",1,85],["sched","Appointment scheduler",1,70],["portal","Patient web portal",1,60],["pacs","Imaging (PACS)",1,80],
+   ["s_reg","Patient registration",2,95,1],["s_lab","Lab results to doctors",2,90,1],["s_opd","OPD scheduling",2,75,1],["s_bill","Billing & insurance",2,80,1],["s_online","Online appointments",2,55,1]],
+  edges:[["ad","ehr"],["ad","lis"],["ad","sched"],["ad","pacs"],["db","ehr"],["db","lis"],["db","sched"],["fw","portal"],["sched","portal"],["ehr","s_reg"],["ehr","s_bill"],["lis","s_lab"],["pacs","s_lab"],["sched","s_opd"],["portal","s_online"]],
+  findings:[
+   ["f1","SMB signing not required on domain controller","ad",8.1,"internal","Greenbone"],
+   ["f2","VPN appliance firmware with known RCE","fw",9.8,"internet","Nessus import"],
+   ["f3","Database server missing 6 months of patches","db",7.8,"internal","Wazuh"],
+   ["f4","Portal login allows unlimited password attempts","portal",6.5,"internet","Manual review"],
+   ["f5","PACS workstation runs unsupported OS","pacs",7.5,"unknown","Asset inventory"],
+   ["f6","Backups not tested for restore in 9 months","nas",5.0,"isolated","Manual review"]],
+  owners:["Ravi (IT lead)","Meera (sysadmin)","Vendor: LabSoft"]},
+ school:{label:"School",org:"Greenfield Public School · 1,200 students · 1 IT staff",
+  nodes:[
+   ["idp","Google Workspace accounts",0,90],["wifi","Wi-Fi controller",0,60],["srv","School server",0,85],["pay","Payment gateway link",0,75],
+   ["sis","Student info system",1,95],["att","Attendance app",1,70],["pp","Parent portal",1,65],["lms","Learning platform",1,75],["web","School website",1,45],
+   ["s_att","Daily attendance",2,80,1],["s_rc","Report cards",2,85,1],["s_comm","Parent communication",2,70,1],["s_fee","Fee collection",2,85,1],["s_class","Online classes",2,65,1]],
+  edges:[["idp","sis"],["idp","lms"],["idp","att"],["srv","sis"],["srv","att"],["wifi","att"],["wifi","lms"],["sis","pp"],["pay","pp"],["sis","s_rc"],["att","s_att"],["pp","s_comm"],["pp","s_fee"],["lms","s_class"],["web","s_comm"]],
+  findings:[
+   ["f1","Admin accounts without 2-step verification","idp",8.8,"internet","Workspace audit"],
+   ["f2","Parent portal uses outdated TLS and weak ciphers","pp",6.8,"internet","Greenbone"],
+   ["f3","School server shares student records folder to Everyone","srv",7.6,"internal","Manual review"],
+   ["f4","Wi-Fi controller default admin password","wifi",8.0,"internal","Greenbone"],
+   ["f5","Website CMS plugin with known XSS","web",6.1,"internet","WPScan import"],
+   ["f6","Attendance app version support status unclear","att",5.5,"unknown","Asset inventory"]],
+  owners:["Anil (IT teacher)","Office admin","Vendor: EduSoft"]},
+ smb:{label:"Small business",org:"Kaveri Home Stores · 2 outlets + online · no dedicated IT",
+  nodes:[
+   ["mail","Business email",0,80],["rtr","Router / firewall",0,75],["vm","Cloud server",0,85],["nas","Office NAS",0,60],
+   ["pos","Point-of-sale app",1,90],["inv","Inventory database",1,85],["shop","Online store",1,75],["acct","Accounting software",1,80],
+   ["s_store","In-store sales",2,95,1],["s_online","Online orders",2,80,1],["s_gst","GST invoicing",2,85,1],["s_cust","Customer support email",2,60,1]],
+  edges:[["rtr","pos"],["vm","inv"],["vm","shop"],["inv","pos"],["inv","shop"],["nas","acct"],["acct","s_gst"],["pos","s_store"],["pos","s_gst"],["shop","s_online"],["mail","s_cust"],["mail","s_online"]],
+  findings:[
+   ["f1","Router remote admin open to the internet","rtr",9.0,"internet","Nmap review"],
+   ["f2","Cloud server SSH allows password login","vm",7.5,"internet","Lynis import"],
+   ["f3","Email lacks DMARC; spoofing possible","mail",6.0,"internet","DNS check"],
+   ["f4","Inventory DB backups stored on same server","inv",6.5,"internal","Manual review"],
+   ["f5","NAS firmware 2 major versions behind","nas",7.2,"unknown","Asset inventory"],
+   ["f6","Shared admin login on POS terminals","pos",6.8,"internal","Manual review"]],
+  owners:["Owner (Suresh)","Freelance IT","Vendor: POSWorks"]}
+};
+const EXPO={internet:90,network:70,internal:45,isolated:15,unknown:null};
+const EXPO_LBL={internet:"Internet-facing",network:"Reachable from local network (e.g. venue Wi-Fi)",internal:"Internal network",isolated:"Isolated",unknown:"Unknown"};
+let cur="college",sel=null,sim=null,tasks={};const OVR={};
+let MODE=(()=>{try{return localStorage.getItem("is_mode")||"simple"}catch(e){return "simple"}})();
+function renderViewmode(){$("viewmode").innerHTML=[["simple","Simple"],["full","Full"]].map(([k,l])=>`<button type="button" data-m="${k}" aria-pressed="${MODE===k}">${l}</button>`).join("");
+  $("viewmode").querySelectorAll("button").forEach(b=>b.onclick=()=>setMode(b.dataset.m))}
+function setMode(m){MODE=m;document.body.classList.toggle("simple",m==="simple");try{localStorage.setItem("is_mode",m)}catch(e){}renderViewmode()}
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function band(r){return r>=80?"critical":r>=60?"high":r>=30?"medium":"low"}
+function data(){return SECTORS[cur]}
+function node(id){const n=data().nodes.find(n=>n[0]===id),o=(OVR[cur]||{})[id];return{id:n[0],name:n[1],tier:n[2],crit:o??n[3],svc:!!n[4]}}
+function critInfo(id){ // asset inherits the highest criticality among services that depend on it
+  const own=node(id).crit;let C=own,from=null;
+  for(const s of Object.keys(impact(id))){const ns=node(s);if(ns.svc&&ns.crit>C){C=ns.crit;from=s}}
+  return{C,own,from};
+}
+function score(f,mod={}){
+  const S=Math.round(f[3]*10*(mod.sevMul??1)),ek=mod.expo??f[4],Eraw=EXPO[ek],E=Eraw==null?50:Eraw,ci=critInfo(f[2]),C=ci.C;
+  return{S,E,C,ci,unknown:Eraw==null,R:Math.round(0.4*S+0.3*E+0.3*C)};
+}
+function missing(f,s,svcs){const m=[];
+  if(s.unknown)m.push("Network exposure not confirmed");
+  if(!svcs.length)m.push("No business service mapped to this asset");
+  if(/inventory|manual/i.test(f[5]))m.push("Not yet confirmed by a scanner");
+  if(f[3]>=7)m.push("Vendor patch or workaround not recorded");
+  return m}
+function ranked(){return data().findings.map(f=>({f,s:score(f)})).sort((a,b)=>b.s.R-a.s.R)}
+function impact(start){ // BFS over "depends on" edges; visited set handles cycles
+  const out={},q=[[start,0,[start]]],seen=new Set([start]);
+  while(q.length){const[id,d,p]=q.shift();
+    for(const[a,b]of data().edges)if(a===id&&!seen.has(b)){seen.add(b);out[b]={hops:d+1,path:[...p,b]};q.push([b,d+1,[...p,b]])}}
+  return out;
+}
+
+function renderSector(){
+  $("sector").innerHTML=Object.entries(SECTORS).map(([k,v])=>`<button type="button" data-k="${k}" aria-pressed="${k===cur}">${v.label}</button>`).join("");
+  $("sector").querySelectorAll("button").forEach(b=>b.onclick=()=>{cur=b.dataset.k;sel=null;sim=null;initTasks();renderAll()});
+  $("orgline").innerHTML=`<b>${esc(data().org)}</b> · ${cur==="mine"||cur==="live"?"live results from your own systems":"synthetic demo tenant · data isolated per organization"}`;
+}
+function renderKPIs(){
+  const r=ranked(),crit=r.filter(x=>band(x.s.R)==="critical").length,high=r.filter(x=>band(x.s.R)==="high").length;
+  const svc=new Set();r.filter(x=>x.s.R>=60).forEach(x=>Object.keys(impact(x.f[2])).forEach(id=>{if(node(id).svc)svc.add(id)}));
+  const totalSvc=data().nodes.filter(n=>n[4]).length;
+  const ver=Object.values(tasks).filter(t=>t.status==="ver").length;
+  $("kpis").innerHTML=[
+   ["Open findings",r.length-ver,`from ${new Set(data().findings.map(f=>f[5])).size} sources`],
+   ["Critical / high",`${crit} / ${high}`,"after context scoring"],
+   ["Services exposed",`${svc.size} / ${totalSvc}`,"reachable from high-risk assets"],
+   ["Verified fixes",`${ver} / ${r.length}`,"with recorded evidence"]
+  ].map(([l,v,s])=>`<div class="kpi"><div class="eyebrow">${l}</div><div class="v">${v}</div><div class="muted" style="font-size:12px">${s}</div></div>`).join("");
+}
+function renderFindings(){
+  const r=ranked();if(!r.length){$("findings").innerHTML=`<tr><td colspan="4" class="muted">No findings. No listening network services were detected.</td></tr>`;return}if(!sel)sel=r[0].f[0];
+  $("findings").innerHTML=r.map(({f,s})=>{const b=band(s.R),done=tasks[f[0]]?.status==="ver";
+   return`<tr class="row${f[0]===sel?" sel":""}" data-id="${f[0]}" tabindex="0"><td class="c-risk"><span class="score">${s.R}</span></td>
+   <td>${done?"<s>":""}${esc(f[1])}${done?"</s>":""}<div class="src">${esc(node(f[2]).name)} · ${esc(f[5])}</div></td><td class="c-asset">${esc(node(f[2]).name)}</td>
+   <td><span class="pill p-${b}">${b.toUpperCase()}</span></td></tr>`}).join("");
+  $("findings").querySelectorAll("tr").forEach(tr=>{const go=()=>{sel=tr.dataset.id;renderFindings();renderDetail()};tr.onclick=go;tr.onkeydown=e=>{if(e.key==="Enter")go()}});
+}
+function renderDetail(){
+  const f=data().findings.find(f=>f[0]===sel);if(!f){$("detail").innerHTML=`<h2>Why this score</h2><p class="muted">Nothing to score yet.</p>`;return}const s=score(f),n=node(f[2]),b=band(s.R),imp=impact(f[2]);
+  const svcs=Object.keys(imp).filter(id=>node(id).svc).map(id=>node(id).name);
+  const bar=(lbl,v,w,note,unk)=>`<div class="bar"><span>${lbl}</span><div class="track"><div class="fill${unk?" unk":""}" style="width:${v}%"></div></div><span class="mono">${v} × ${w}</span></div><div class="src" style="margin:-6px 0 0 120px">${note}</div>`;
+  $("detail").innerHTML=`<div class="panel-head"><h2 id="whytitle"></h2><span class="pill p-${b}">${b.toUpperCase()}</span></div>
+   <div style="font-weight:600">${esc(f[1])}</div><div class="muted" style="font-size:13px">${esc(n.name)} · source: ${esc(f[5])}</div>
+   <div class="catchip">Category: ${esc(VNAME[classify(f)])}</div>
+   <div class="adv"><div style="display:flex;gap:16px;align-items:flex-end;margin-top:12px"><div class="big">${s.R}</div><div class="muted" style="font-size:12px;padding-bottom:4px">of 100<br>deterministic, reproducible</div></div>
+   <div class="bars">
+    ${bar("Severity",s.S,"0.4",`CVSS ${f[3].toFixed(1)} from scanner`)}
+    ${bar("Exposure",s.E,"0.3",s.unknown?"Unknown: shown as 50 and flagged, never assumed low":EXPO_LBL[f[4]],s.unknown)}
+    ${bar("Criticality",s.C,"0.3",s.ci.from?`Inherited from ${esc(node(s.ci.from).name)} (own value ${s.ci.own})`:`Own criticality of ${esc(n.name)}, no more critical service depends on it`)}
+   </div>
+   <div class="formula">R = 0.4·${s.S} + 0.3·${s.E} + 0.3·${s.C} = ${(0.4*s.S+0.3*s.E+0.3*s.C).toFixed(1)} → ${s.R}</div></div>
+   <div class="explain"><div class="eyebrow">Plain-language explanation</div>
+    <p>${esc(n.name)} has a ${f[3]>=9?"critical":f[3]>=7?"serious":"moderate"} weakness: ${esc(f[1].toLowerCase())}. It is ${s.unknown?"<b>not yet known</b> whether it is reachable from outside, so confirm its network exposure first":EXPO_LBL[f[4]].toLowerCase()+" "+(f[4]==="internet"?"so anyone online can try to reach it":f[4]==="network"?"so anyone on the same Wi-Fi or LAN can try to reach it":"so an attacker would need a foothold inside first")}.
+    ${svcs.length?`If it were compromised or went offline, these ${svcs.length} services depend on it: <b>${svcs.map(esc).join(", ")}</b>.`:"No business service currently depends on it in the recorded map."}</p>
+    ${(()=>{const m=missing(f,s,svcs);return m.length?`<div class="eyebrow">Missing information</div><div class="chips">${m.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</div>`:""})()}
+    <div id="aiout"></div><div class="src">Built only from the recorded evidence above. An optional local AI model can rephrase this; it never changes the score.</div>
+    ${fixCard(f,s,n)}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="askAI">Explain in simple words (AI)</button><button class="btn ghost" id="simThis">Simulate failure of ${esc(n.name)}</button></div></div>`;
+  $("askAI").onclick=()=>askAI(f,s,n,svcs);
+  $("simThis").onclick=()=>{$("simAsset").value=f[2];sim=f[2];renderGraph();renderSim();$("graph").scrollIntoView({behavior:"smooth",block:"center"})};
+}
+function layout(){
+  const cols=[16,352,688],W=256,H=40,pos={},GH=graphH();
+  [0,1,2].forEach(t=>{const ns=data().nodes.filter(n=>n[2]===t),gap=(GH-40)/ns.length;
+   ns.forEach((n,i)=>pos[n[0]]={x:cols[t],y:20+gap*i+(gap-H)/2,w:W,h:H})});
+  return pos;
+}
+function graphH(){return Math.max(470,40+52*Math.max(...[0,1,2].map(t=>data().nodes.filter(n=>n[2]===t).length)))}
+function renderGraph(){
+  $("graph").setAttribute("viewBox",`0 0 960 ${graphH()}`);
+  const pos=layout(),imp=sim?impact(sim):{},hasF=new Set(data().findings.filter(f=>tasks[f[0]]?.status!=="ver").map(f=>f[2]));
+  let svg=`<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--edge)"/></marker>
+   <marker id="arh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--high)"/></marker></defs>`;
+  ["Infrastructure","Systems","Business services"].forEach((t,i)=>svg+=`<text x="${[16,352,688][i]}" y="13" fill="var(--muted)" font-family="var(--f-body)" font-size="11" letter-spacing="1">${t.toUpperCase()}</text>`);
+  for(const[a,b]of data().edges){const A=pos[a],B=pos[b],hot=sim&&(a===sim||imp[a])&&imp[b];
+   let d;if(A.x===B.x){const x=A.x+A.w,y1=A.y+A.h/2,y2=B.y+B.h/2;d=`M${x} ${y1} C${x+60} ${y1},${x+60} ${y2},${x+2} ${y2}`}
+   else{const x1=A.x+A.w,y1=A.y+A.h/2,x2=B.x-2,y2=B.y+B.h/2,m=(x1+x2)/2;d=`M${x1} ${y1} C${m} ${y1},${m} ${y2},${x2} ${y2}`}
+   svg+=`<path d="${d}" fill="none" stroke="${hot?"var(--high)":"var(--edge)"}" stroke-width="${hot?2.4:1.3}" marker-end="url(#${hot?"arh":"ar"})"/>`}
+  for(const n of data().nodes){const p=pos[n[0]],nd=node(n[0]);
+   let fill=nd.svc?"var(--accent-soft)":"var(--node)",stroke="var(--edge)",sw=1;
+   if(sim===n[0]){fill="var(--crit-soft)";stroke="var(--crit)";sw=2.2}else if(imp[n[0]]){fill="var(--high-soft)";stroke="var(--high)";sw=2}
+   const dot=hasF.has(n[0]),maxc=Math.floor((p.w-24-(dot?16:0))/7.2),lbl=n[1].length>maxc?n[1].slice(0,maxc-1).trimEnd()+"…":n[1];
+   svg+=`<g class="node" data-id="${n[0]}" tabindex="0" role="button" aria-label="${esc(n[1])}"><title>${esc(n[1])}</title>
+    <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="10" fill="var(--graph-bg)"/>
+    <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>
+    <text x="${p.x+12}" y="${p.y+25}" fill="var(--ink)" font-family="var(--f-body)" font-size="13" font-weight="500">${esc(lbl)}</text>
+    ${hasF.has(n[0])?`<circle cx="${p.x+p.w-12}" cy="${p.y+p.h/2}" r="5" fill="var(--crit)"/>`:""}</g>`}
+  $("graph").innerHTML=svg;
+  $("graph").querySelectorAll("g.node").forEach(g=>{const go=()=>{$("simAsset").value=g.dataset.id;sim=g.dataset.id;renderGraph();renderSim()};g.onclick=go;g.onkeydown=e=>{if(e.key==="Enter")go()}});
+}
+function renderSim(){
+  if(!sim){$("simout").innerHTML=`<div class="muted" style="font-size:13px">No scenario running. Click any box in the map, or pick an asset and press Run simulation.</div>`;return}
+  const imp=impact(sim),ids=Object.keys(imp).sort((a,b)=>imp[a].hops-imp[b].hops),svcs=ids.filter(i=>node(i).svc),sys=ids.filter(i=>!node(i).svc);
+  const crit=svcs.length?Math.max(...svcs.map(i=>node(i).crit)):0;
+  const li=i=>`<li><span>${esc(node(i).name)}<div class="path">${imp[i].path.map(p=>esc(node(p).name)).join(" → ")}</div></span><span class="mono" style="font-size:12px;white-space:nowrap">${imp[i].hops} hop${imp[i].hops>1?"s":""}</span></li>`;
+  $("simout").innerHTML=`<div><div class="scenario"><b>Hypothetical scenario:</b> ${esc(node(sim).name)} is compromised or unavailable. This shows possible dependency impact from the recorded map, not a prediction that an attack will spread.</div>
+   <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:12px">
+    <div><div class="eyebrow">Services affected</div><div class="big" style="font-size:32px">${svcs.length}</div></div>
+    <div><div class="eyebrow">Systems affected</div><div class="big" style="font-size:32px">${sys.length}</div></div>
+    <div><div class="eyebrow">Highest service criticality</div><div class="big" style="font-size:32px">${crit||"—"}</div></div></div></div>
+   <div><div class="eyebrow">Possibly affected, nearest first</div><ul class="affected">${ids.length?ids.map(li).join(""):"<li class='muted'>Nothing depends on this asset in the recorded map.</li>"}</ul></div>
+   <div class="ba"><div class="panel-head" style="margin:0"><h3 style="font-size:16px">Before and after a proposed fix</h3>
+    <div class="simbar"><label for="fixType" class="eyebrow">Proposed fix</label><select id="fixType">
+     <option value="patch"${FIX==="patch"?" selected":""}>Patch the vulnerability</option>
+     <option value="restrict"${FIX==="restrict"?" selected":""}>Restrict network exposure</option>
+     <option value="redundant"${FIX==="redundant"?" selected":""}>Add tested failover / redundancy</option></select>
+     <button class="btn" id="recalc">Recalculate</button></div></div>
+    <div id="baout"></div></div>`;
+  $("fixType").onchange=()=>{FIX=$("fixType").value;renderBA()};$("recalc").onclick=renderBA;renderBA();
+}
+let FIX="patch";
+const FIX_NOTE={patch:"Assumes the patch removes 80% of the severity (20% residual) until a rescan verifies it. The outage impact is unchanged, because the asset can still fail.",
+ restrict:"Assumes the service is taken off the network (firewall rule or localhost binding), so exposure drops to Isolated (15). Severity and criticality are unchanged.",
+ redundant:"Assumes a tested failover keeps dependent services running if this asset goes offline. It does not reduce the vulnerability itself."};
+function renderBA(){
+  const id=sim,fx=FIX,fs=data().findings.filter(f=>f[2]===id&&tasks[f[0]]?.status!=="ver");
+  const mod=fx==="patch"?{sevMul:.2}:fx==="restrict"?{expo:"isolated"}:{};
+  const b=fs.map(f=>score(f).R),a=fs.map(f=>score(f,mod).R),sum=x=>x.reduce((p,c)=>p+c,0),mx=x=>x.length?Math.max(...x):0;
+  const svc=Object.keys(impact(id)).filter(i=>node(i).svc).length;
+  const rows=[["Highest finding risk score on this asset",mx(b),mx(a)],["Combined risk of open findings here",sum(b),sum(a)],
+   ["Services exposed through high or critical findings",mx(b)>=60?svc:0,mx(a)>=60?svc:0],["Services disrupted if this asset goes offline",svc,fx==="redundant"?0:svc]];
+  $("baout").innerHTML=`${fs.length?"":`<div class="muted" style="font-size:13px">No open findings on this asset, so only the outage rows can change.</div>`}
+   <div class="tbl"><table><thead><tr><th>Measure</th><th>Before</th><th>After proposed fix</th><th>Change</th></tr></thead><tbody>
+   ${rows.map(([l,x,y])=>`<tr><td>${l}</td><td class="mono">${x}</td><td class="mono">${y}</td><td class="mono ${y<x?"good":"same"}">${y<x?"−"+(x-y):"no change"}</td></tr>`).join("")}</tbody></table></div>
+   <div class="src">${FIX_NOTE[fx]} A proposed fix is not a resolution until verification evidence is recorded.</div>`;
+}
+function effortOf(f){const t=fixFor(f);if(/unsupported|replace/i.test(f[1]))return 3;if(/^(Harden access|Bind to localhost|Confirm)/.test(t))return 1;return 2}
+function renderFixCompare(){
+  const open=data().findings.filter(f=>tasks[f[0]]?.status!=="ver");
+  if(!open.length){$("fixrec").innerHTML="";$("fixcmp").innerHTML=`<tr><td colspan="7" class="muted">No open findings to compare.</td></tr>`;return}
+  const rows=open.map(f=>{const s=score(f),svcs=Object.keys(impact(f[2])).filter(i=>node(i).svc),e=effortOf(f),c=[];
+    if(s.C>=85)c.push("Needs a maintenance window");
+    if(/^Vendor/.test(tasks[f[0]]?.owner||""))c.push("Vendor coordination");
+    if(f[4]==="internet"||f[4]==="network")c.push("Exposed now");
+    if(cur==="hospital"&&s.C>=85)c.push("Clinical uptime: schedule off-peak");
+    if(!svcs.length)c.push("Isolated asset");
+    return{f,s,svcs,e,c,v:s.R*(1+0.25*svcs.length)/e}}).sort((a,b)=>b.v-a.v);
+  const top=rows[0],E=["","Low","Medium","High"];
+  const last=rows[rows.length-1];
+  $("fixrec").innerHTML=`<div class="rec"><b>Investigate first:</b> ${esc(fixFor(top.f))} on ${esc(node(top.f[2]).name)}. It addresses a risk of ${top.s.R} and protects ${top.svcs.length} service${top.svcs.length===1?"":"s"} for ${E[top.e].toLowerCase()} effort.
+   ${last!==top?` By comparison, the lowest-value fix (${esc(node(last.f[2]).name)}) protects ${last.svcs.length} service${last.svcs.length===1?"":"s"}.`:""}</div>`;
+  $("fixcmp").innerHTML=rows.map((r,i)=>`<tr><td class="mono">${i+1}</td><td>${esc(fixFor(r.f))}<div class="src">${esc(node(r.f[2]).name)}</div></td>
+   <td><span class="pill p-${band(r.s.R)}">${r.s.R}</span></td><td class="mono">${r.svcs.length}</td><td class="mono">${r.s.C}</td><td>${E[r.e]}</td><td style="font-size:12px">${r.c.map(esc).join(" · ")||"—"}</td></tr>`).join("");
+}
+function renderPriorities(){
+  const svcs=data().nodes.filter(n=>n[4]);
+  $("prio").innerHTML=svcs.map(n=>{const v=node(n[0]).crit;return`<div class="rule"><label for="pr-${n[0]}">${esc(n[1])}</label><input type="range" min="0" max="100" step="5" id="pr-${n[0]}" data-id="${n[0]}" value="${v}"><span class="mono">${v}</span></div>`}).join("");
+  $("prio").querySelectorAll("input").forEach(i=>i.oninput=()=>{(OVR[cur]=OVR[cur]||{})[i.dataset.id]=+i.value;i.nextElementSibling.textContent=i.value;
+    renderKPIs();renderFindings();renderDetail();renderFixCompare();renderTasks();if(sim)renderBA()});
+}
+function initTasks(){tasks={};const o=data().owners;ranked().forEach(({f},i)=>tasks[f[0]]={owner:o[i%o.length],status:i===0?"prog":"open",ev:"",msg:""})}
+const ST={open:"Open",prog:"In progress",fixed:"Fixed, awaiting verification",ver:"Verified"};
+const SC={open:"s-open",prog:"s-prog",fixed:"s-fixed",ver:"s-ver"};
+function renderTasks(){
+  $("tasks").innerHTML=ranked().map(({f,s},i)=>{const t=tasks[f[0]];
+   return`<tr><td><span class="mono">P${i+1}</span> <span class="pill p-${band(s.R)}">${s.R}</span></td>
+   <td>${esc(fixFor(f))}<div class="src">${esc(node(f[2]).name)}</div></td>
+   <td>${esc(t.owner)}</td>
+   <td><span class="status ${SC[t.status]}">${ST[t.status]}</span>
+    ${t.status!=="ver"?`<div style="margin-top:6px"><select id="st-${f[0]}" data-id="${f[0]}" aria-label="Change status">${["open","prog","fixed"].map(k=>`<option value="${k}"${k===t.status?" selected":""}>${ST[k]}</option>`).join("")}</select></div>`:""}</td>
+   <td>${t.status==="ver"?`<span class="ok">✓ ${esc(t.ev)}</span>`:`<div class="evrow"><input type="text" id="ev-${f[0]}" placeholder="e.g. Rescan #4471 clean" value="${esc(t.ev)}"><button class="btn ghost" data-v="${f[0]}">Verify</button></div>${t.msg?`<div class="err">${t.msg}</div>`:""}`}</td></tr>`}).join("");
+  $("tasks").querySelectorAll("select").forEach(s=>s.onchange=()=>{tasks[s.dataset.id].status=s.value;tasks[s.dataset.id].msg="";renderTasks()});
+  $("tasks").querySelectorAll("button[data-v]").forEach(b=>b.onclick=()=>{const id=b.dataset.v,t=tasks[id],ev=$("ev-"+id).value.trim();t.ev=ev;
+    if(t.status!=="fixed")t.msg="Set status to “Fixed, awaiting verification” first.";
+    else if(ev.length<5)t.msg="Add evidence (rescan ID, screenshot ref or config diff) before verifying.";
+    else{t.status="ver";t.msg=""}
+    renderTasks();renderKPIs();renderFindings();renderGraph();renderFixCompare();if(sim)renderBA()});
+}
+function fixFor(f){const t=f[1].toLowerCase();
+  if(t.includes("all network interfaces"))return"Bind to localhost, firewall it, or disable: "+f[1];
+  if(t.includes("localhost only"))return"Confirm it is needed: "+f[1];
+  if(t.includes("firmware")||t.includes("patch")||t.includes("unsupported")||t.includes("outdated")||t.includes("plugin")||t.includes("version"))return"Update or replace: "+f[1];
+  if(t.includes("password")||t.includes("2-step")||t.includes("login")||t.includes("ssh"))return"Harden access: "+f[1];
+  if(t.includes("backup"))return"Fix backup process: "+f[1];
+  if(t.includes("anonymous")||t.includes("admin")||t.includes("shared"))return"Harden access: "+f[1];
+  if(t.includes("remote code")||t.includes("vulnerability"))return"Patch or mitigate: "+f[1];
+  return"Remediate: "+f[1]}
+function renderSimSelect(){$("simAsset").innerHTML=data().nodes.filter(n=>!n[4]).map(n=>`<option value="${n[0]}">${esc(n[1])}</option>`).join("")}
+$("runSim").onclick=()=>{sim=$("simAsset").value;renderGraph();renderSim()};
+$("clearSim").onclick=()=>{sim=null;renderGraph();renderSim()};
+const VCAT=[["weakpw","Weak passwords / credentials"],["outdated","Outdated software"],["patches","Missing security patches"],["accesscontrol","Broken access control"],["sqli","SQL injection"],["xss","Cross-site scripting (XSS)"],["misconfig","Cloud misconfiguration"],["excessive","Excessive permissions"],["apis","Insecure APIs"],["remote","Exposed remote access"],["backups","Missing / untested backups"],["segmentation","Poor network segmentation"],["encryption","Insecure encryption"],["thirdparty","Vulnerable third-party software"],["unsupporteddev","Unsupported devices"]];
+const VNAME=Object.fromEntries(VCAT);
+const VRULES=[
+ [/sql injection/,"sqli"],[/xss|cross-site/,"xss"],
+ [/2-step|mfa|2fa|two-factor/,"weakpw"],
+ [/default .*password|default admin|shared .*login|weak password|unlimited password|password login|password auth|brute/,"weakpw"],
+ [/backup|restore/,"backups"],
+ [/struts|plugin|\blibrary\b|\bcms\b/,"thirdparty"],
+ [/tls|cipher|unencrypted|clear ?text|dmarc|secure flag|encrypt/,"encryption"],
+ [/remote desktop|\brdp\b|\bssh\b|\bvnc\b|telnet|docker api|remote admin|remote login|jupyter|remote access/,"remote"],
+ [/\bapi\b/,"apis"],
+ [/known rce|remote code|missing .*patch|patches|unpatched/,"patches"],
+ [/firmware|versions behind|outdated|obsolete|out of date/,"outdated"],
+ [/unsupported|support status|no longer receives|end[- ]of[- ]life|\beol\b/,"X"],
+ [/wi-?fi|segmentation|guest network/,"segmentation"],
+ [/signing not required|smb signing|all network interfaces|open to the internet|publicly|misconfig|public /,"misconfig"],
+ [/admin|administrator|excessive|full control|privilege/,"excessive"],
+ [/anonymous bind|everyone|\bshare\b|shares|folder|records|authorization|permission|access/,"accesscontrol"]];
+function classify(f){if(f[6]&&f[6].category&&VNAME[f[6].category])return f[6].category;
+  const t=(f[1]+" "+(f[6]?JSON.stringify(f[6]):"")).toLowerCase();
+  for(const[re,id]of VRULES)if(re.test(t)){if(id==="X")return /\bos\b|workstation|device|cluster|hardware|firmware/.test(t)?"unsupporteddev":"outdated";return id}
+  return "accesscontrol"}
+const FIXLVL={self:["You can usually do this yourself","lvl-self"],it:["Best done with your IT person","lvl-it"],pro:["Call a security professional","lvl-pro"]};
+const FIXGUIDE={
+ weakpw:{level:"self",steps:["Give every person their own login — stop sharing accounts.","Change any default or easy-to-guess passwords; a long phrase works well.","Turn on two-step verification (a code sent to a phone) for email and admin logins."]},
+ outdated:{level:"self",steps:["Open the app or system's update screen and install the available updates.","Turn on automatic updates so it stays current on its own.","If it can no longer be updated, plan to replace it."]},
+ patches:{level:"pro",steps:["Note the system and the fix named in the finding.","Ask your IT person or the vendor to apply the security update.","Until it is fixed, limit who can reach that system."]},
+ accesscontrol:{level:"it",steps:["List who can currently open the sensitive system or folder.","Remove anyone who does not need it.","Ask IT to switch off any 'anonymous' or 'everyone' access."]},
+ sqli:{level:"pro",steps:["Do not change the website's code yourself.","Give this finding to the developer who built or maintains the app.","Ask them to check and clean all user input (they will know the term)."]},
+ xss:{level:"pro",steps:["Do not change the website's code yourself.","Pass this to the developer who maintains the site.","Ask them to safely handle what users type in and what the page shows back."]},
+ misconfig:{level:"it",steps:["Note the exact service or setting named in the finding.","Ask IT or your cloud admin to close it or restrict who can reach it.","Confirm it can no longer be reached from outside."]},
+ excessive:{level:"it",steps:["Review who has 'administrator' rights.","Change anyone who does not need it to a normal user.","Keep admin access to one or two trusted people."]},
+ apis:{level:"pro",steps:["Note which connection or API the finding names.","Give it to your developer or IT person.","Ask them to require a proper login/key on it."]},
+ remote:{level:"it",steps:["Ask IT whether this remote access is really needed.","If it is not, turn it off.","If it is, put it behind a VPN and require two-step verification (usually needs IT)."]},
+ backups:{level:"self",steps:["Make sure important data is copied to a separate place, not the same server.","Once a month, restore one file to check the backup actually works.","Keep one recent copy offline or in a separate account."]},
+ segmentation:{level:"it",steps:["Note which network can reach the sensitive systems.","Ask IT to keep guest and general Wi-Fi separate from internal systems.","Confirm guests can no longer reach internal systems."]},
+ encryption:{level:"it",steps:["Note the service in the finding (a website, email, and so on).","Ask IT or the vendor to turn on modern encryption (HTTPS / TLS).","Ask them to switch off the old, weak settings."]},
+ thirdparty:{level:"pro",steps:["Identify the software, plugin or library named in the finding.","Ask the developer or IT to update it to a fixed version, or remove it.","If it is important and exposed, restrict access until it is fixed."]},
+ unsupporteddev:{level:"self",steps:["Confirm the device or system really has stopped getting security updates.","Plan to upgrade or replace it.","Until then, keep it off the main network."]}};
+function fixInfo(f,s){const id=classify(f),g=FIXGUIDE[id]||FIXGUIDE.accesscontrol,crit=band(s.R)==="critical",level=crit?"pro":g.level;
+  return{id,level,steps:g.steps,crit,pro:level==="pro"}}
+function fixCard(f,s,n){const fi=fixInfo(f,s),[lab,cls]=FIXLVL[fi.level];
+  return`<div class="fix"><div class="eyebrow">How to fix this</div><span class="lvl ${cls}">${lab}</span>
+   ${fi.crit?`<div class="probanner">This one looks serious. Limit who can use ${esc(n.name)} right now, and have a security professional confirm and fix it promptly.</div>`:fi.pro?`<div class="probanner">This usually needs someone technical — plan to involve your IT person or a professional.</div>`:""}
+   <ol class="steps">${fi.steps.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>
+   <div class="src">Simple starting steps. Your exact screens may look a little different; when unsure, ask for help rather than guessing.</div></div>`}
+function renderCoverage(){
+  const counts={};data().findings.forEach(f=>{const c=classify(f);counts[c]=(counts[c]||0)+1});
+  const present=Object.keys(counts).length;
+  $("covorg").textContent=data().label;
+  $("covcount").textContent=`${present} of 15 present · ${data().findings.length} findings classified`;
+  $("cov").innerHTML=VCAT.map(([id,name],i)=>{const c=counts[id]||0;
+    return`<div class="cv${c?" hit":""}"><div class="n">${String(i+1).padStart(2,"0")}</div><div class="t">${name}</div><div class="c${c?"":" zero"}">${c?c+" found":"monitored, none found"}</div></div>`}).join("");
+}
+function renderAll(){renderViewmode();renderSector();renderKPIs();renderPriorities();renderFindings();renderDetail();renderSimSelect();renderGraph();renderSim();renderFixCompare();renderCoverage();renderTasks()}
+document.body.classList.toggle("simple",MODE==="simple");
+async function aiStatus(){try{const r=await fetch("/api/ai-status");const j=await r.json();$("aistat").textContent=j.ok&&j.model?`AI: ${j.model} (local)`:"AI: offline, core app still works"}catch(e){$("aistat").textContent="AI: needs local server";$("scanBtn").disabled=true;$("scanBtn").title="Run python3 server.py to enable live scanning"}}
+$("scanBtn").onclick=async()=>{const b=$("scanBtn");b.disabled=true;b.textContent="Scanning…";
+  try{const r=await fetch("/api/scan");SECTORS.live=await r.json();cur="live";sel=null;sim=null;initTasks();renderAll();b.textContent="Re-scan this laptop"}
+  catch(e){b.textContent="Scan failed, retry"}b.disabled=false};
+async function askAI(f,s,n,svcs){const out=$("aiout"),btn=$("askAI");btn.disabled=true;btn.textContent="Thinking…";
+  out.innerHTML=`<div class="ai muted">Local model is writing simple steps…</div>`;
+  const fi=fixInfo(f,s);
+  const ev={organization:data().org,finding:f[1],asset:n.name,source:f[5],cvss_severity:f[3],exposure:EXPO_LBL[f[4]],business_criticality:n.crit,
+    risk_score:s.R,risk_band:band(s.R),dependent_business_services:svcs,how_hard:FIXLVL[fi.level][0],call_professional:fi.pro,details:f[6]||null,missing_information:missing(f,s,svcs)};
+  try{const r=await fetch("/api/explain",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)});const j=await r.json();
+    if(!r.ok)throw new Error(j.error);out.innerHTML=`<div class="ai">${esc(j.text)}</div><div class="aibadge">Generated by ${esc(j.model)} on this laptop from the evidence above. Score unchanged.</div>`}
+  catch(e){out.innerHTML=`<div class="err">${esc(e.message||"The AI helper is unavailable.")} The plain explanation above still applies.</div>`}
+  btn.disabled=false;btn.textContent="Explain in simple words (AI)"}
+initTasks();
+async function loadFromServer(){try{const r=await fetch("/api/orgs");if(!r.ok)return;const j=await r.json();
+  if(j.organizations&&Object.keys(j.organizations).length){Object.assign(SECTORS,j.organizations);if(!SECTORS.mine)cur=Object.keys(j.organizations)[0]}
+  if(j.remediation)window.__SAVED=j.remediation;
+  sel=null;sim=null;initTasks();applySaved();renderAll();
+  $("orgline").insertAdjacentHTML("beforeend"," · served from local data store")}catch(e){}}
+function applySaved(){const sv=window.__SAVED||{};for(const k in sv){const[o,id]=k.split("/");if(o===cur&&tasks[id]){tasks[id].status=sv[k].status||tasks[id].status;tasks[id].ev=sv[k].evidence||""}}}
+async function saveRemediation(id){try{const t=tasks[id];await fetch("/api/remediation",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({org:cur,id,status:t.status,evidence:t.ev})})}catch(e){}}
+renderAll();aiStatus();loadFromServer();
+</script>
+<script src="/app.js"></script>
+<link rel="stylesheet" href="/theme.css">
+</body></html>

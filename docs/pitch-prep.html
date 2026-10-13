@@ -1,0 +1,414 @@
+<title>InfraSentinel Pitch Prep</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky contents rail on the left, one reading column (~68ch) on the right; the Q&A section turns into a practice tool. Uses InfraSentinel's own palette and type. */
+:root{
+  --bg:#EEF2F7; --surface:#FFFFFF; --ink:#0B1220; --muted:#5B6879; --line:rgba(16,32,64,.11);
+  --accent:#0A6CFF; --accent-soft:rgba(10,108,255,.10);
+  --crit:#D92D20; --crit-soft:rgba(255,59,48,.10); --high:#B86200; --high-soft:rgba(255,149,0,.13);
+  --low:#1B8A4A; --low-soft:rgba(52,199,89,.13); --code:#F2F5FA;
+  --f-display:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --f-body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#070B12; --surface:#111823; --ink:#EEF3FA; --muted:#9AA7B9; --line:rgba(255,255,255,.10);
+  --accent:#4DA3FF; --accent-soft:rgba(77,163,255,.14);
+  --crit:#FF6B61; --crit-soft:rgba(255,69,58,.15); --high:#FFA53D; --high-soft:rgba(255,159,10,.15);
+  --low:#4CD97B; --low-soft:rgba(48,209,88,.14); --code:#0B111A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#070B12; --surface:#111823; --ink:#EEF3FA; --muted:#9AA7B9; --line:rgba(255,255,255,.10);
+  --accent:#4DA3FF; --accent-soft:rgba(77,163,255,.14);
+  --crit:#FF6B61; --crit-soft:rgba(255,69,58,.15); --high:#FFA53D; --high-soft:rgba(255,159,10,.15);
+  --low:#4CD97B; --low-soft:rgba(48,209,88,.14); --code:#0B111A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15.5px/1.65 var(--f-body);letter-spacing:-.006em;-webkit-font-smoothing:antialiased}
+.shell{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 80px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:calc(20px + env(safe-area-inset-top,0px));align-self:start;display:grid;gap:2px;font-size:13.5px}
+nav.toc .brand{display:flex;align-items:center;gap:9px;font:800 16px var(--f-display);margin-bottom:14px}
+nav.toc .logo{width:28px;height:28px;border-radius:9px;background:var(--accent);display:grid;place-items:center}
+nav.toc a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:10px;font-weight:500}
+nav.toc a:hover{background:var(--accent-soft);color:var(--ink)}
+nav.toc a.on{background:var(--surface);color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+main{min-width:0;display:grid;gap:56px}
+section{scroll-margin-top:20px;display:grid;gap:16px;min-width:0}
+.kicker{font:600 12px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+h1{font:800 clamp(32px,5vw,46px)/1.05 var(--f-display);letter-spacing:-.035em;margin:0;text-wrap:balance;max-width:20ch}
+h2{font:800 27px/1.15 var(--f-display);letter-spacing:-.025em;margin:0;text-wrap:balance}
+h3{font:700 17px/1.3 var(--f-display);letter-spacing:-.015em;margin:0}
+p{margin:0;max-width:68ch}
+.lede{font-size:17.5px;color:var(--muted);max-width:60ch}
+.muted{color:var(--muted)}
+ul,ol{margin:0;padding-left:20px;display:grid;gap:6px;max-width:68ch}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+b{font-weight:650}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px 22px;display:grid;gap:10px;min-width:0}
+.say{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 16px 16px 0;padding:16px 20px;font-size:17px;line-height:1.6;max-width:72ch}
+.say small{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12.5px;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.num{font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font:700 11px var(--f-body);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.p-self{background:var(--low-soft);color:var(--low)} .p-it{background:var(--high-soft);color:var(--high)} .p-pro{background:var(--crit-soft);color:var(--crit)}
+.p-crit{background:var(--crit-soft);color:var(--crit)} .p-med{background:var(--high-soft);color:var(--high)}
+/* flow diagram */
+.flow{display:grid;grid-template-columns:1fr auto 1.15fr auto 1fr;align-items:center;gap:10px}
+.node{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;display:grid;gap:4px;min-width:0}
+.node b{font-size:14.5px}.node span{font-size:12.5px;color:var(--muted);line-height:1.45}
+.node.hub{border-color:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 10px 30px -18px var(--accent)}
+.arrow{display:grid;justify-items:center;font-size:11px;color:var(--muted);text-align:center;line-height:1.3;min-width:70px}
+.arrow::before{content:"⟷";font-size:22px;color:var(--accent);line-height:1}
+.under{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px;max-width:520px;margin-inline:auto}
+/* demo timeline */
+.timeline{display:grid;gap:0;border-left:2px solid var(--line);margin-left:8px}
+.step{position:relative;padding:0 0 18px 22px;display:grid;gap:4px}
+.step::before{content:"";position:absolute;left:-7px;top:6px;width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--bg)}
+.step .t{font:600 12.5px var(--f-mono);color:var(--accent)}
+.step .who{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+/* practice */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 13px var(--f-body);padding:7px 13px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip:focus-visible,.btn:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.search{flex:1 1 220px;min-width:0;font:14px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 14px}
+.btn{border:0;background:var(--accent);color:#fff;font:600 14px var(--f-body);padding:9px 16px;border-radius:999px;cursor:pointer}
+.btn.ghost{background:var(--surface);color:var(--accent);border:1px solid var(--line)}
+.progress{font-size:13px;color:var(--muted)}
+.qa{display:grid;gap:10px}
+details.q{background:var(--surface);border:1px solid var(--line);border-radius:16px;min-width:0}
+details.q[open]{border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+details.q summary{list-style:none;cursor:pointer;padding:14px 16px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start}
+details.q summary::-webkit-details-marker{display:none}
+.qcat{font:700 10.5px var(--f-body);letter-spacing:.05em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:3px 8px;white-space:nowrap;margin-top:2px}
+.qcat.tough{color:var(--crit);background:var(--crit-soft)}
+.qtext{font-weight:650;line-height:1.45}
+.chev{color:var(--muted);transition:transform .2s;margin-top:2px}
+details.q[open] .chev{transform:rotate(90deg)}
+.ans{padding:0 16px 16px 16px;display:grid;gap:10px;font-size:14.8px}
+.ans .short{border-left:3px solid var(--low);padding-left:12px}
+.ans .done{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;width:fit-content}
+.drill{background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:20px;padding:22px;display:grid;gap:14px}
+.drill .dq{font:700 21px/1.35 var(--f-display);letter-spacing:-.015em}
+.glossary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.term{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:3px;font-size:14px}
+.term b{font-size:14.5px}
+.themebtn{position:fixed;right:16px;top:calc(16px + env(safe-area-inset-top,0px));z-index:5;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-size:17px}
+@media (max-width:920px){.shell{grid-template-columns:1fr;gap:24px}nav.toc{position:static;display:flex;flex-wrap:wrap;gap:4px}nav.toc .brand{width:100%;margin-bottom:4px}
+  .grid3{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.arrow{min-width:0}.arrow::before{content:"⇅"}}
+@media (max-width:640px){.grid2,.glossary,.under{grid-template-columns:1fr}body{font-size:15px}}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
+</style>
+
+<button class="themebtn" id="themeBtn" type="button" aria-label="Switch theme">◐</button>
+<div class="shell">
+  <nav class="toc" aria-label="Contents" id="toc">
+    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.4"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/></svg></span>Pitch prep</div>
+    <a href="#pitch">The pitch</a><a href="#problem">Problem & customer</a><a href="#how">How it works</a><a href="#checks">What it checks</a>
+    <a href="#score">How we score risk</a><a href="#ai">The AI</a><a href="#safety">Our own security</a><a href="#business">Business model</a>
+    <a href="#compete">Competition</a><a href="#demo">Demo script</a><a href="#qa">Judge Q&A practice</a><a href="#limits">Limits & roadmap</a><a href="#terms">Glossary</a>
+  </nav>
+
+  <main>
+    <section id="pitch">
+      <div class="kicker">Team briefing · read before the pitch</div>
+      <h1>InfraSentinel, explained so anyone on the team can answer.</h1>
+      <p class="lede">Read sections 1–4 at least once each. Then use the Q&A practice until every question feels easy. The bold sentences are the ones to say out loud.</p>
+      <div class="say"><small>The one-line pitch</small>InfraSentinel finds the security problems inside a small organization's servers and laptops, explains each one in plain language, and tells the owner exactly what to do, including when to call a professional.</div>
+      <div class="say"><small>The 30-second version</small>Small businesses, schools and clinics run their apps on secure clouds, but the security of their own servers is still their job: passwords, updates, open services, admin rights, backups. They have no security staff to check these. InfraSentinel installs a small read-only checker with one command, finds the problems, ranks them by what matters to that organization, and gives simple fix steps. A security-tuned AI that runs privately on our own machine answers follow-up questions. The owner sees what to fix first, who should fix it, and proof when it's done.</div>
+    </section>
+
+    <section id="problem">
+      <h2>The problem and who it's for</h2>
+      <div class="grid2">
+        <div class="card"><h3>The problem</h3><p>Security tools give long lists of technical alerts. A school office manager or a shop owner can't tell which alert could stop billing tomorrow, or how to fix it. There is no one on staff to translate.</p></div>
+        <div class="card"><h3>Who it's for</h3><p>Small businesses and startups, schools, colleges, and clinics with one or two IT people or none. People who are not computer experts.</p></div>
+      </div>
+      <div class="card"><h3>The cloud argument (judges asked this before)</h3>
+        <p><b>Cloud security is shared.</b> AWS, Azure and Google secure the data centres and their platform. The customer is still responsible for what they put on it: accounts and passwords, settings, updates, which services are open, admin rights, backups. That half is where small teams fail, and that is the half InfraSentinel covers.</p></div>
+      <div class="say"><small>Say it like this</small>Your cloud provider protects the cloud. We help with your part of it.</div>
+    </section>
+
+    <section id="how">
+      <h2>How it works</h2>
+      <p>Three parts talk to each other. Everything runs on our laptop for the prototype, reachable from anywhere through a secure public link.</p>
+      <div class="flow" role="img" aria-label="Owner's browser connects to the InfraSentinel server, which connects to checkers on each server; the server also uses a local AI and optional web search">
+        <div class="node"><b>Owner's browser</b><span>Sign in, see problems, simple fixes, Ask the AI, fix list, plans</span></div>
+        <div class="arrow">HTTPS<br>public link</div>
+        <div class="node hub"><b>InfraSentinel server</b><span>Our laptop. Accounts, each organization's data, risk scoring, fix rules. Python, no extra libraries.</span></div>
+        <div class="arrow">reports out<br>every check</div>
+        <div class="node"><b>Checker on each machine</b><span>Linux or Windows. Read-only. Installed with one command by the owner.</span></div>
+      </div>
+      <div class="under">
+        <div class="node"><b>Local AI (Ollama)</b><span>Foundation-Sec 8B, runs on our own GPU. Explains, never scores.</span></div>
+        <div class="node"><b>Web search (optional)</b><span>Looks up current fix steps and shows its sources.</span></div>
+      </div>
+      <div class="card"><h3>The owner's journey, step by step</h3>
+        <ol>
+          <li><b>Sign in</b> or create an account for the organization. Each organization only ever sees its own machines.</li>
+          <li><b>Connect a server or PC.</b> Pick Linux/Mac or Windows, copy one command, paste it on that machine. It works from Command Prompt, PowerShell or a Linux terminal.</li>
+          <li><b>The checker reads settings and logs</b> (never changes anything) and sends a report within seconds.</li>
+          <li><b>Problems appear</b>, most serious first. Each has simple steps and a label: <span class="pill p-self">You can do this</span> <span class="pill p-it">Your IT person</span> <span class="pill p-pro">Call a professional</span>.</li>
+          <li><b>Ask the AI</b> anything in plain words. With web search on, it reads current guides and cites them.</li>
+          <li><b>Fix it, then prove it.</b> A fix only counts as done when proof is recorded, such as a clean re-scan.</li>
+          <li><b>Scan now</b> from anywhere. If the owner allowed it, the machine re-checks itself within about 15 seconds.</li>
+        </ol></div>
+      <div class="card"><h3>Why "Scan now" works through firewalls</h3><p>The checker on the machine asks our server "anything for me?" every 15 seconds. That is an outgoing connection, like opening a website, so no ports need to be opened on the customer's network. We never connect in to their machine.</p></div>
+    </section>
+
+    <section id="checks">
+      <h2>What the checker looks at</h2>
+      <p>All checks are read-only. Some need administrator rights; without them the checker says exactly what it skipped.</p>
+      <div class="grid2">
+        <div class="card"><h3>Linux servers</h3><ul>
+          <li>Services open to the network</li><li>SSH: password logins, direct root login</li><li>Security patches waiting, automatic updates</li>
+          <li>Operating system still supported</li><li>Firewall turned on</li><li>Extra admin accounts, admin group size</li>
+          <li>Password file permissions, empty passwords (admin)</li><li>A backup tool or schedule</li>
+          <li>Logs, last 7 days: failed sign-ins and where from, root sign-ins, failed sudo, new accounts, system errors</li></ul></div>
+        <div class="card"><h3>Windows PCs</h3><ul>
+          <li>Windows Firewall for each network type</li><li>Microsoft Defender on, definitions up to date</li><li>Days since the last Windows update</li>
+          <li>Windows version still supported</li><li>Remote Desktop and Network Level Authentication</li><li>Old SMBv1 file sharing (WannaCry)</li>
+          <li>Admin accounts, Guest, built-in Administrator, UAC</li><li>Password length and lockout rules</li><li>BitLocker disk encryption (admin), backups</li>
+          <li>Event logs: failed sign-ins (4625), remote sign-ins (4624), new accounts (4720)</li></ul></div>
+      </div>
+      <p>Every problem is filed under one of <b>15 kinds of weakness</b>: weak passwords, outdated software, missing patches, broken access control, SQL injection, cross-site scripting, misconfiguration, excessive permissions, insecure APIs, exposed remote access, missing backups, poor network separation, weak encryption, vulnerable third-party software, and unsupported devices.</p>
+      <p class="muted">Be precise if asked: the checker covers configuration-level problems on machines. SQL injection and cross-site scripting live in website code; finding those needs a web-app test, which is on our roadmap as an import from tools like OWASP ZAP.</p>
+    </section>
+
+    <section id="score">
+      <h2>How we score risk</h2>
+      <p>The score is a fixed formula, so the same inputs always give the same answer. <b>The AI never changes a score.</b></p>
+      <div class="card"><div style="font:700 20px var(--f-mono)">Risk = 0.4 × Severity + 0.3 × Exposure + 0.3 × Criticality</div>
+        <ul>
+          <li><b>Severity</b> (0–100): how bad the weakness is, from the industry CVSS score × 10.</li>
+          <li><b>Exposure</b>: internet-facing 90, reachable on the local network 70, internal 45, isolated 15. Unknown counts as 50 and is flagged, never treated as safe.</li>
+          <li><b>Criticality</b>: how important the asset is to the organization. An asset <b>inherits</b> the importance of the most critical service that depends on it.</li>
+        </ul>
+        <div><span class="pill p-crit">Critical 80–100</span> <span class="pill p-med">High 60–79</span> <span class="pill" style="background:var(--accent-soft);color:var(--accent)">Medium 30–59</span> <span class="pill p-self">Low 0–29</span></div></div>
+      <div class="tbl"><table>
+        <thead><tr><th>Worked example (college sample)</th><th>Severity</th><th>Exposure</th><th>Criticality</th><th>Score</th></tr></thead>
+        <tbody>
+          <tr><td>Apache Struts flaw on the <b>shared app server</b> (exam results depend on it)</td><td class="num">98</td><td class="num">45</td><td class="num">95 (inherited)</td><td><span class="pill p-crit">81 Critical</span></td></tr>
+          <tr><td>The <b>same flaw</b> on a test server nothing depends on</td><td class="num">98</td><td class="num">45</td><td class="num">20</td><td><span class="pill" style="background:var(--accent-soft);color:var(--accent)">59 Medium</span></td></tr>
+        </tbody></table></div>
+      <div class="say"><small>Say it like this</small>Same vulnerability, different priority, because of what depends on it. That's the core idea.</div>
+      <div class="card"><h3>Who should fix it</h3><p>Fixed rules decide the label. Weak passwords, updates, backups and old devices: <span class="pill p-self">You can do this</span>. Access rules, settings, remote access, encryption, network separation: <span class="pill p-it">Your IT person</span>. Missing patches, vulnerable components, website flaws, insecure APIs: <span class="pill p-pro">Call a professional</span>. <b>Anything scored Critical always says call a professional</b>, with "limit access until then".</p></div>
+    </section>
+
+    <section id="ai">
+      <h2>The AI</h2>
+      <div class="grid2">
+        <div class="card"><h3>What it is</h3><p><b>Foundation-Sec-8B-Instruct</b> from Cisco's Foundation AI team, a security-tuned model built on Meta's Llama 3.1 8B. It runs through Ollama on our own laptop's GPU (about 5 GB). Users can switch models in the app.</p></div>
+        <div class="card"><h3>What it does</h3><ul><li>Explains a problem in plain words</li><li>Reviews all problems: what to fix first</li><li>Reads the log summary: signs of attack, yes / no / unclear</li><li>Answers follow-up questions in a chat</li></ul></div>
+        <div class="card"><h3>What it does not do</h3><ul><li>It does not scan. The checker finds problems; the AI explains them.</li><li>It does not change scores or fix labels.</li><li>It does not invent findings: it is told to use only the scan data and to say when it doesn't know.</li><li>It refuses to help attack systems people don't own.</li></ul></div>
+        <div class="card"><h3>Privacy</h3><p>Scan results and logs go only to the AI on our own machine, never to OpenAI or any cloud AI. With web search on, only the search words leave: the problem name or the question typed, plus the operating system (for example "SSH accepts passwords Ubuntu 24.04 how to fix"). Scan data and logs are never sent. Answers show the pages they used.</p></div>
+      </div>
+    </section>
+
+    <section id="safety">
+      <h2>How our own product stays safe</h2>
+      <div class="tbl"><table><tbody>
+        <tr><td><b>Checker is read-only</b></td><td>It reads settings and logs only. <code>--dry-run</code> prints exactly what it would send. <code>--no-logs</code> skips logs. <code>--uninstall</code> removes it.</td></tr>
+        <tr><td><b>Only checks itself</b></td><td>The checker reports on the machine it runs on. It never scans other machines on the network.</td></tr>
+        <tr><td><b>Accounts kept apart</b></td><td>Each organization has its own data and its own access code. We tested that one account cannot see or scan another's machines.</td></tr>
+        <tr><td><b>Access codes</b></td><td>A leaked code only lets someone send reports, not read anything. "Reset access code" turns old commands off.</td></tr>
+        <tr><td><b>Passwords and sign-in</b></td><td>Passwords stored hashed (PBKDF2-SHA256, 200,000 rounds). Sessions are HttpOnly cookies that expire after 12 hours.</td></tr>
+        <tr><td><b>Public link</b></td><td>HTTPS through Cloudflare. While public: the demo password is replaced, "Scan this laptop" and model changes only work on the host laptop, and each account gets 20 AI requests per 10 minutes.</td></tr>
+        <tr><td><b>Web search safety</b></td><td>Only public web pages are fetched; local and private network addresses are blocked.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section id="business">
+      <h2>Business model</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Plan</th><th>Price (sample)</th><th>For</th><th>Includes</th></tr></thead>
+        <tbody>
+          <tr><td><b>Free</b></td><td class="num">₹0</td><td>Trying it out</td><td>1 server, scans, simple fixes</td></tr>
+          <tr><td><b>Starter</b></td><td class="num">₹999 / month</td><td>Small business or school</td><td>Up to 5 servers, Scan now, AI with web search, fix list</td></tr>
+          <tr><td><b>Professional</b></td><td class="num">₹3,999 / month</td><td>Growing business, college, clinic</td><td>Up to 25 servers, log reading, impact map, 3 team members</td></tr>
+          <tr><td><b>Institutional</b></td><td>Custom</td><td>Large college or hospital</td><td>Unlimited servers, teams and roles, reports, support agreement</td></tr>
+        </tbody></table></div>
+      <p class="muted">Yearly billing = 2 months free. These are pricing hypotheses to test with pilots, not proven numbers.</p>
+      <div class="card"><h3>Price comparison (from our research notes, verify before quoting)</h3><ul>
+        <li>Managed security service for a small Indian business: roughly ₹15,000–30,000 a month (our estimate).</li>
+        <li>Tenable Nessus Professional (a scanner only): about US$4,790 a year.</li>
+        <li>Wazuh Cloud (monitoring): from about US$571 a month for 100 agents.</li>
+        <li>DefectDojo Community: free software, but needs someone to host and run it.</li></ul>
+        <p>These products do different jobs, so say "in the same budget range" rather than "cheaper than X for the same thing".</p></div>
+      <div class="card"><h3>How we'd reach customers</h3><ul>
+        <li>Pilots with a few local schools, a college department and a clinic, measuring time-to-fix before and after.</li>
+        <li>Local IT service providers who look after many small offices: one dashboard for all their clients.</li>
+        <li>College IT teams as early adopters.</li></ul></div>
+    </section>
+
+    <section id="compete">
+      <h2>Competition, honestly</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Tool</th><th>What it's great at</th><th>Where we're different</th></tr></thead>
+        <tbody>
+          <tr><td><b>Tenable / Nessus</b></td><td>Finding vulnerabilities, enterprise exposure management</td><td>Built for security teams; we're built for owners with no security staff</td></tr>
+          <tr><td><b>Wazuh</b></td><td>Open-source monitoring and alerts (SIEM)</td><td>Alerts still need an expert; we turn findings into plain steps and "who should fix"</td></tr>
+          <tr><td><b>DefectDojo</b></td><td>Collecting and tracking findings</td><td>We add business impact, priorities per organization type, and AI explanations</td></tr>
+          <tr><td><b>Managed security services</b></td><td>People who do it for you</td><td>We're far cheaper and give the owner visibility; we tell them when they do need such a service</td></tr>
+        </tbody></table></div>
+      <div class="say"><small>Say it like this</small>We don't claim to out-scan the big tools. We connect problems to what the organization depends on, explain them so a non-expert can act, and know when to send them to a professional.</div>
+    </section>
+
+    <section id="demo">
+      <h2>Demo script (about 5 minutes)</h2>
+      <p>Roles: <b>Presenter</b> talks, <b>Driver</b> clicks, <b>Tech lead</b> takes technical questions, <b>Business lead</b> takes market and pricing questions. Never talk over the demo.</p>
+      <div class="timeline">
+        <div class="step"><span class="t">0:00</span><span class="who">Presenter</span><p>Hook: "A 40-bed clinic's IT person gets hundreds of alerts. Which one could stop patient registration tomorrow?"</p></div>
+        <div class="step"><span class="t">0:30</span><span class="who">Presenter</span><p>Problem and the cloud argument. "Your cloud provider protects the cloud. We help with your part of it."</p></div>
+        <div class="step"><span class="t">1:15</span><span class="who">Driver</span><p>Show the login page, sign in. Point at the clean overview: Problems to fix, Serious, Fixed.</p></div>
+        <div class="step"><span class="t">1:40</span><span class="who">Driver</span><p>Press <b>Scan this laptop</b>. Problems appear. Click one: simple steps and "who should fix it".</p></div>
+        <div class="step"><span class="t">2:30</span><span class="who">Driver</span><p>The friend's <b>Windows laptop</b> (set up before): press <b>Scan now</b>, fresh results in about 15 seconds.</p></div>
+        <div class="step"><span class="t">3:10</span><span class="who">Driver</span><p><b>Ask the AI</b>: "Is my laptop safe right now?" Point out the cited sources.</p></div>
+        <div class="step"><span class="t">3:45</span><span class="who">Driver</span><p><b>Fix list</b>: mark a fix done; it needs proof to be verified.</p></div>
+        <div class="step"><span class="t">4:05</span><span class="who">Driver</span><p>Turn on <b>Advanced</b>, open the <b>Impact map</b>, simulate one failure.</p></div>
+        <div class="step"><span class="t">4:25</span><span class="who">Business lead</span><p><b>Plans</b> page and how we'd reach customers.</p></div>
+        <div class="step"><span class="t">4:45</span><span class="who">Presenter</span><p>Close: "Find it, explain it, fix it, prove it."</p></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h3>Before you go on</h3><ul>
+          <li>Run <code>bash start.sh --public</code>; share the new link</li><li>Ask the AI one question to warm it up</li>
+          <li>Friend's PC online with "Scan now" allowed</li><li>Sign in, scan once, close other tabs</li><li>Phone hotspot ready as backup internet</li></ul></div>
+        <div class="card"><h3>If something fails</h3><ul>
+          <li>Public link down: use <code>http://127.0.0.1:8765</code> on the laptop</li>
+          <li>AI slow: show an answer you ran before; say it runs locally</li>
+          <li>Windows PC offline: show its last results and the Online badge from earlier</li>
+          <li>Anything else: switch to the sample organizations in Advanced</li></ul></div>
+      </div>
+    </section>
+
+    <section id="qa">
+      <h2>Judge Q&A practice</h2>
+      <p>Answers are hidden until you open them. Say your answer out loud first, then check. Mark each one when you can answer it without looking.</p>
+      <div class="toolbar" id="cats" role="group" aria-label="Filter questions"></div>
+      <div class="toolbar">
+        <input class="search" id="qsearch" type="search" placeholder="Search questions" aria-label="Search questions">
+        <button class="btn" id="drillBtn" type="button">Drill me</button>
+        <button class="btn ghost" id="openAll" type="button">Show all answers</button>
+        <span class="progress" id="progress"></span>
+      </div>
+      <div class="drill" id="drill" hidden>
+        <div class="toolbar" style="justify-content:space-between"><span class="qcat" id="dcat"></span><button class="btn ghost" id="drillClose" type="button">Close</button></div>
+        <div class="dq" id="dq"></div>
+        <div id="da" hidden></div>
+        <div class="toolbar"><button class="btn" id="dshow" type="button">Show answer</button><button class="btn ghost" id="dnext" type="button">Next question</button></div>
+      </div>
+      <div class="qa" id="qalist"></div>
+    </section>
+
+    <section id="limits">
+      <h2>Limits and roadmap</h2>
+      <p>Judges respect honest answers. If a question touches one of these, say it plainly and say what's next.</p>
+      <div class="grid2">
+        <div class="card"><h3>Prototype limits today</h3><ul>
+          <li>Runs on one laptop; the public link changes each restart and needs the laptop on.</li>
+          <li>Data is stored in files, not a production database.</li>
+          <li>Firewall and backup checks are best guesses; cloud firewalls and provider backups can make them not applicable.</li>
+          <li>Doesn't test website code (SQL injection, cross-site scripting).</li>
+          <li>Windows needs Python installed, and its checks were mostly tested with simulated Windows outputs, so try them on a real PC before the demo.</li>
+          <li>Plans are sample pricing; no payments.</li>
+          <li>Score weights are illustrative and need calibrating with real pilots.</li></ul></div>
+        <div class="card"><h3>Next steps</h3><ul>
+          <li>Hosted service with a database and our own domain</li><li>One-click installers for Windows and Linux</li>
+          <li>Import findings from Greenbone, Wazuh and OWASP ZAP</li><li>Email or WhatsApp alerts for serious problems</li>
+          <li>Team roles and multi-site organizations</li><li>Reports that support good practice under India's DPDP Act (not a compliance guarantee)</li>
+          <li>Pilots to measure time-to-fix and calibrate the score</li></ul></div>
+      </div>
+    </section>
+
+    <section id="terms">
+      <h2>Glossary</h2>
+      <p>Every term a judge might use, in one line.</p>
+      <div class="glossary" id="glossary"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const QA=[
+ ["Product","What problem are you solving?","Small organizations can't tell which security problem matters or how to fix it, because they have no security staff.","Security tools produce long technical lists. A school or clinic has no one to translate those into 'fix this first, this way'. We find the problems, rank them by what the organization depends on, and give plain steps with a clear 'who should fix it'."],
+ ["Product","Who exactly is your customer?","Small businesses, startups, schools, colleges and clinics with little or no IT staff.","The person using it is an owner, office manager or a lone IT person. Later, local IT service providers who look after many small offices are a strong channel."],
+ ["Tough","Everything is on the cloud now and the cloud is secure. Why is this needed?","Cloud security is shared: the provider secures the platform, the customer secures their own setup.","Passwords, settings, updates, open services, admin rights and backups are the customer's job on any cloud. That is where small teams fail and exactly what we check. 'Your cloud provider protects the cloud. We help with your part of it.'"],
+ ["Tough","How are you different from Tenable, Nessus or Wazuh?","They're built for security experts; we're built for people who aren't.","We don't claim to out-scan them. We connect each problem to what the organization depends on, score it for that organization, explain it in plain words with steps, say who should fix it, and track proof of the fix. Their alerts still need an expert to act on."],
+ ["Product","Is InfraSentinel a vulnerability scanner?","It's a checker plus a translator.","A small read-only checker reads each machine's settings and logs. The main value is what comes after: ranking by business impact, plain fix steps, 'call a professional' when needed, the AI assistant, and proof-of-fix tracking."],
+ ["Technical","How does the scan actually work?","The owner runs one command; a read-only Python checker inspects that machine and sends a report.","On Linux it reads the socket table, SSH settings, package updates, OS version, firewall status, accounts and auth logs. On Windows it uses netstat, netsh, PowerShell and the registry. The report goes to our server over HTTPS, where it's scored and shown."],
+ ["Technical","Does the checker change anything on the machine?","No. It only reads.","It never changes settings or installs packages. Run it with --dry-run to see exactly what it would send. --no-logs skips logs, and --uninstall removes it completely."],
+ ["Technical","Why install something instead of scanning from outside?","From the inside you see what really matters: patches, accounts, settings and logs.","An outside scan only sees open ports. The checker sees missing updates, weak SSH settings, admin accounts and failed sign-ins. It also needs no open ports and only runs where the owner agreed to install it."],
+ ["Technical","How does 'Scan now' reach a machine behind a firewall?","The machine asks us every 15 seconds, so the connection always goes outward.","Outgoing HTTPS is allowed almost everywhere, like browsing a website. We never connect into the customer's network, so no firewall changes are needed."],
+ ["Technical","Which operating systems do you support?","Linux servers and Windows PCs, with basic checks on macOS.","Windows checks include Firewall, Defender, updates, version support, Remote Desktop, SMBv1, admin accounts, UAC, password rules, BitLocker, backups and event logs. Linux covers SSH, patches, firewall, accounts, backups and auth logs."],
+ ["Technical","Where is customer data stored?","In the prototype, in files on our server, separated per organization.","For a real launch we'd move to a managed database with encryption and backups. We store only what's needed: settings found, problems, and a short log summary, not full logs."],
+ ["Tough","How do you stop one customer seeing another's data?","Every account belongs to one organization and every request is checked against it.","Each organization has its own data and its own access code. We specifically tested that a second account can't see, or even detect, another account's machines, and that switching accounts in the same browser shows nothing from the old one."],
+ ["Tough","What if someone's access code leaks?","It only lets someone send reports, not read anything, and it can be reset.","Pressing 'Reset access code' turns every old command off instantly. Reading data always needs a signed-in account."],
+ ["Technical","How is the risk score calculated?","Risk = 0.4 × Severity + 0.3 × Exposure + 0.3 × Criticality.","Severity comes from the CVSS score, exposure from where the service is reachable, criticality from what depends on the asset. Example: the same Struts flaw scores 81 Critical on a shared server that exam results depend on, but 59 Medium on a test server."],
+ ["Tough","Why those weights? Are they validated?","They're starting weights, chosen to be explainable. Calibrating them is the first thing pilots are for.","We'd compare our ranking with what real IT staff fix first, and adjust. The formula is visible in the app so nobody has to trust a black box."],
+ ["Technical","What does 'criticality is inherited' mean?","A server is as important as the most important service that depends on it.","A plain app server becomes critical if exam results or patient registration run on it. That's why the same weakness can be urgent on one machine and minor on another."],
+ ["Technical","What about false positives?","Each finding says what it saw, and guesses are labelled.","For checks that can't be certain, like the firewall or backups, the finding explains why and tells the owner when to mark it not applicable, for example when a cloud firewall already protects the server."],
+ ["Product","How do you know a problem is really fixed?","A fix only counts when proof is recorded, such as a clean re-scan.","Marking 'fixed' isn't enough. The fix list asks for evidence, and 'Scan now' gives that proof in seconds."],
+ ["AI","Which AI model do you use and why?","Foundation-Sec-8B-Instruct, a security-tuned model from Cisco built on Llama 3.1 8B.","It's trained for security language, it's small enough to run on a laptop GPU (about 5 GB), and running it locally keeps customer data private. The app lets you switch models."],
+ ["Tough","Does customer data go to OpenAI or any cloud AI?","No. Scans and logs only go to the AI running on our own machine.","With web search on, only the search words leave: the problem name or the typed question, plus the operating system, such as 'SSH accepts passwords Ubuntu 24.04 how to fix'. Scan results, logs and account details are never sent."],
+ ["Tough","What if the AI makes something up?","The important parts don't come from the AI.","Scores, priorities and 'who should fix it' come from fixed rules. The AI only explains, is told to use only the scan data, and shows sources when it uses the web. The counts in the logs come from the log reader, not the AI."],
+ ["AI","Why run AI locally instead of using GPT?","Privacy, cost and control.","Security data is sensitive, especially for clinics and schools. A local model costs nothing per question and works without sending data out. The trade-off is that a hosted version would need GPU servers, which we've priced into the plans."],
+ ["AI","What does the web search add?","Current, specific fix steps with sources the user can check.","It searches for the problem plus the operating system, reads the top pages, prefers official documentation, and the answer cites them with clickable [1], [2] links."],
+ ["Tough","Isn't installing your agent a security risk itself?","It's a short, readable Python file that only reads, and it can show exactly what it sends.","It uses only Python's standard library, runs as a normal user unless the owner chooses admin, can be previewed with --dry-run, and removed with --uninstall. Nothing on the machine is changed."],
+ ["Tough","Could attackers use your tool to scan other people?","No. The checker can only report on the machine it's installed on.","It doesn't scan networks or other machines. On the public link, laptop scanning is locked to the host, AI use is rate-limited, and web search blocks private network addresses."],
+ ["Technical","Is the public link secure?","It's HTTPS through Cloudflare, with sign-in, hashed passwords and session expiry.","It's a prototype link. For launch we'd use our own domain and a hosted service. While public, the demo password is replaced with a one-off password."],
+ ["Business","How will you make money?","Monthly plans by number of servers: Free, ₹999 Starter, ₹3,999 Professional, Custom Institutional.","Yearly billing gives 2 months free. These are hypotheses to test in pilots. A managed security service for a small business costs roughly ₹15,000–30,000 a month by our estimate, so we sit in a much lower range."],
+ ["Business","How will you find customers?","Pilots first, then IT service providers as a channel.","We'd start with a few schools, a college department and a clinic, measure time-to-fix, and use those results. Local IT providers who manage many small offices can roll it out to all their clients."],
+ ["Tough","How big is the market?","We haven't sized it precisely yet, and we won't make up a number.","What we know is that small organizations far outnumber large ones and most have no security staff. Pilots will tell us willingness to pay at our price points."],
+ ["Business","What does it cost you to run?","Very little per customer: a small server, storage and AI time.","The checker runs on the customer's machine. The heaviest cost is the AI; locally that's free, and hosted we'd use one GPU server across many customers."],
+ ["Tough","What's actually built versus planned?","Built: accounts, Linux and Windows checkers, scoring, fixes, logs, local AI with web search, Scan now, public link, plans page.","Planned: hosted database and domain, installers, imports from other scanners, alerts, team roles, compliance reports. We kept that line clear on purpose."],
+ ["Business","What's next after the hackathon?","Pilots and a hosted version.","Run 3–5 pilots, measure time-to-fix, calibrate scores, build installers, and move from the laptop to a hosted service."],
+ ["Product","Does it help with laws like India's DPDP Act?","It supports good security practice for personal data, but it isn't a compliance guarantee.","Schools and clinics hold personal data. Reports mapped to good practice are on our roadmap; we wouldn't claim compliance."],
+ ["Technical","What if a Windows PC doesn't have Python?","The command says so and links to python.org.","The command finds Python whether it was installed from python.org or elsewhere. A one-click installer that includes everything is on the roadmap."],
+ ["Technical","How long does a scan take?","Usually a few seconds, up to about a minute on Windows.","Windows takes longer because reading the update history and event logs is slower."],
+ ["Tough","Does it find website bugs like SQL injection?","Not yet. Our checker covers machine settings; website code needs a web-app test.","We file problems into 15 categories including SQL injection and cross-site scripting, and importing results from tools like OWASP ZAP is on the roadmap."]
+];
+const TERMS=[["CVSS","Industry 0–10 scale for how severe a vulnerability is."],["CVE","A public ID for one known vulnerability, like CVE-2023-50164."],["SSH","Encrypted remote login to Linux servers, usually port 22."],["RDP / Remote Desktop","Windows remote screen access, port 3389; a common ransomware entry."],["NLA","Network Level Authentication: makes Remote Desktop users prove who they are first."],["SMBv1","An old Windows file-sharing protocol abused by the WannaCry ransomware."],["UAC","User Account Control: Windows asks before admin-level changes."],["BitLocker","Windows disk encryption; protects data on a lost or stolen laptop."],["Patch","A software update that fixes a security flaw."],["Firewall","Software that blocks unwanted network connections."],["Agent / checker","Our small read-only program that runs on each machine."],["Ollama","Free software that runs AI models on your own computer."],["LLM","Large language model: the kind of AI that reads and writes text."],["Foundation-Sec-8B","Cisco's security-tuned 8-billion-parameter AI model."],["Cloudflare tunnel","Gives our laptop a secure public https link without opening ports."],["Shared responsibility","Cloud provider secures the platform; the customer secures their own setup."],["SIEM","Security monitoring that collects and alerts on logs (e.g. Wazuh)."],["Brute force","Guessing passwords over and over, often by bots."],["PBKDF2","A slow, salted way to store passwords so they're hard to crack."],["DPDP Act","India's Digital Personal Data Protection Act, 2023."]];
+let cat="All", openAll=false; let done={};
+try{done=JSON.parse(localStorage.getItem("ispp_done")||"{}")}catch(e){}
+const saveDone=()=>{try{localStorage.setItem("ispp_done",JSON.stringify(done))}catch(e){}};
+const cats=["All","Product","Technical","AI","Business","Tough"];
+$("cats").innerHTML=cats.map(c=>`<button class="chip" type="button" data-c="${c}" aria-pressed="${c===cat}">${c==="Tough"?"Tough ones":c}</button>`).join("");
+$("cats").querySelectorAll("button").forEach(b=>b.onclick=()=>{cat=b.dataset.c;$("cats").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));render()});
+function render(){
+  const q=$("qsearch").value.trim().toLowerCase();
+  const list=QA.map((x,i)=>({x,i})).filter(({x})=>(cat==="All"||x[0]===cat)&&(!q||(x[1]+" "+x[2]+" "+x[3]).toLowerCase().includes(q)));
+  $("qalist").innerHTML=list.map(({x,i})=>`<details class="q" id="q${i}"${openAll?" open":""}><summary><span class="qcat${x[0]==="Tough"?" tough":""}">${x[0]}</span><span class="qtext">${esc(x[1])}</span><span class="chev" aria-hidden="true">›</span></summary>
+    <div class="ans"><div class="short"><b>${esc(x[2])}</b></div><p>${esc(x[3])}</p>
+    <label class="done" for="d${i}"><input type="checkbox" id="d${i}" data-i="${i}"${done[i]?" checked":""}> I can answer this without looking</label></div></details>`).join("")||`<p class="muted">No questions match.</p>`;
+  $("qalist").querySelectorAll("input[data-i]").forEach(c=>c.onchange=()=>{done[c.dataset.i]=c.checked;if(!c.checked)delete done[c.dataset.i];saveDone();prog()});
+  prog();
+}
+function prog(){const n=Object.keys(done).length;$("progress").textContent=`${n} of ${QA.length} practised`}
+$("qsearch").addEventListener("input",render);
+$("openAll").onclick=()=>{openAll=!openAll;$("openAll").textContent=openAll?"Hide all answers":"Show all answers";render()};
+let dIdx=-1;
+function drillNext(){const pool=QA.map((x,i)=>i).filter(i=>(cat==="All"||QA[i][0]===cat)&&!done[i]);const src=pool.length?pool:QA.map((x,i)=>i);
+  let n=src[Math.floor(Math.random()*src.length)];if(src.length>1&&n===dIdx)n=src[(src.indexOf(n)+1)%src.length];dIdx=n;
+  const x=QA[n];$("dcat").textContent=x[0];$("dcat").className="qcat"+(x[0]==="Tough"?" tough":"");$("dq").textContent=x[1];
+  $("da").innerHTML=`<div class="ans" style="padding:0"><div class="short"><b>${esc(x[2])}</b></div><p>${esc(x[3])}</p></div>`;$("da").hidden=true;$("dshow").hidden=false}
+$("drillBtn").onclick=()=>{$("drill").hidden=false;drillNext();$("drill").scrollIntoView({behavior:"smooth",block:"center"})};
+$("dshow").onclick=()=>{$("da").hidden=false;$("dshow").hidden=true};
+$("dnext").onclick=drillNext;$("drillClose").onclick=()=>{$("drill").hidden=true};
+$("glossary").innerHTML=TERMS.map(t=>`<div class="term"><b>${esc(t[0])}</b><span class="muted">${esc(t[1])}</span></div>`).join("");
+render();
+// contents highlight
+const links=[...document.querySelectorAll("nav.toc a")];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(a=>a.classList.toggle("on",a.getAttribute("href")==="#"+e.target.id))}})},{rootMargin:"-20% 0px -70% 0px"});
+document.querySelectorAll("main section").forEach(s=>io.observe(s));
+// theme switch
+try{const t=localStorage.getItem("ispp_theme");if(t)document.documentElement.dataset.theme=t}catch(e){}
+$("themeBtn").onclick=()=>{const dark=(document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"))==="dark";
+  const n=dark?"light":"dark";document.documentElement.dataset.theme=n;try{localStorage.setItem("ispp_theme",n)}catch(e){}};
+</script>

@@ -1,0 +1,835 @@
+{
+ "college": {
+  "label": "College",
+  "org": "Riverside Engineering College · 4,500 students · 4 IT staff",
+  "nodes": [
+   [
+    "idp",
+    "Campus login (LDAP / SSO)",
+    0,
+    85
+   ],
+   [
+    "srv",
+    "Shared app server",
+    0,
+    50
+   ],
+   [
+    "db",
+    "Student records database",
+    0,
+    60
+   ],
+   [
+    "net",
+    "Campus network & Wi-Fi",
+    0,
+    60
+   ],
+   [
+    "sis",
+    "Student information system",
+    1,
+    60
+   ],
+   [
+    "portal",
+    "Student portal",
+    1,
+    55
+   ],
+   [
+    "att",
+    "Attendance system",
+    1,
+    50
+   ],
+   [
+    "lms",
+    "Learning platform (Moodle)",
+    1,
+    55
+   ],
+   [
+    "lab",
+    "Research lab cluster",
+    1,
+    40
+   ],
+   [
+    "test",
+    "Test / staging server",
+    1,
+    20
+   ],
+   [
+    "s_adm",
+    "Admissions & records",
+    2,
+    85,
+    1
+   ],
+   [
+    "s_exam",
+    "Exam results",
+    2,
+    95,
+    1
+   ],
+   [
+    "s_att",
+    "Attendance tracking",
+    2,
+    70,
+    1
+   ],
+   [
+    "s_learn",
+    "Courses & assignments",
+    2,
+    80,
+    1
+   ],
+   [
+    "s_res",
+    "Research computing",
+    2,
+    55,
+    1
+   ]
+  ],
+  "edges": [
+   [
+    "idp",
+    "portal"
+   ],
+   [
+    "idp",
+    "lms"
+   ],
+   [
+    "idp",
+    "att"
+   ],
+   [
+    "srv",
+    "portal"
+   ],
+   [
+    "srv",
+    "att"
+   ],
+   [
+    "srv",
+    "lms"
+   ],
+   [
+    "db",
+    "sis"
+   ],
+   [
+    "sis",
+    "portal"
+   ],
+   [
+    "net",
+    "att"
+   ],
+   [
+    "net",
+    "lab"
+   ],
+   [
+    "sis",
+    "s_adm"
+   ],
+   [
+    "sis",
+    "s_exam"
+   ],
+   [
+    "portal",
+    "s_exam"
+   ],
+   [
+    "att",
+    "s_att"
+   ],
+   [
+    "lms",
+    "s_learn"
+   ],
+   [
+    "lab",
+    "s_res"
+   ]
+  ],
+  "findings": [
+   [
+    "f1",
+    "Apache Struts remote code execution (CVE-2023-50164)",
+    "srv",
+    9.8,
+    "internal",
+    "Greenbone"
+   ],
+   [
+    "f2",
+    "Same Struts vulnerability on test server",
+    "test",
+    9.8,
+    "internal",
+    "Greenbone"
+   ],
+   [
+    "f3",
+    "LDAP allows anonymous bind",
+    "idp",
+    7.5,
+    "internal",
+    "Nessus import"
+   ],
+   [
+    "f4",
+    "Student DB backups unencrypted on file share",
+    "db",
+    6.5,
+    "internal",
+    "Manual review"
+   ],
+   [
+    "f5",
+    "Portal session cookie missing Secure flag",
+    "portal",
+    5.4,
+    "internet",
+    "OWASP ZAP"
+   ],
+   [
+    "f6",
+    "Lab cluster OS support status unknown",
+    "lab",
+    6,
+    "unknown",
+    "Asset inventory"
+   ]
+  ],
+  "owners": [
+   "Priya (IT head)",
+   "Karthik (sysadmin)",
+   "Vendor: CampusERP"
+  ]
+ },
+ "hospital": {
+  "label": "Hospital / clinic",
+  "org": "Sunrise Multispeciality Clinic · 40 beds · 3 IT staff",
+  "nodes": [
+   [
+    "ad",
+    "Active Directory",
+    0,
+    85
+   ],
+   [
+    "fw",
+    "Firewall / VPN",
+    0,
+    80
+   ],
+   [
+    "db",
+    "SQL database server",
+    0,
+    90
+   ],
+   [
+    "nas",
+    "Backup NAS",
+    0,
+    70
+   ],
+   [
+    "ehr",
+    "Electronic health records",
+    1,
+    95
+   ],
+   [
+    "lis",
+    "Lab information system",
+    1,
+    85
+   ],
+   [
+    "sched",
+    "Appointment scheduler",
+    1,
+    70
+   ],
+   [
+    "portal",
+    "Patient web portal",
+    1,
+    60
+   ],
+   [
+    "pacs",
+    "Imaging (PACS)",
+    1,
+    80
+   ],
+   [
+    "s_reg",
+    "Patient registration",
+    2,
+    95,
+    1
+   ],
+   [
+    "s_lab",
+    "Lab results to doctors",
+    2,
+    90,
+    1
+   ],
+   [
+    "s_opd",
+    "OPD scheduling",
+    2,
+    75,
+    1
+   ],
+   [
+    "s_bill",
+    "Billing & insurance",
+    2,
+    80,
+    1
+   ],
+   [
+    "s_online",
+    "Online appointments",
+    2,
+    55,
+    1
+   ]
+  ],
+  "edges": [
+   [
+    "ad",
+    "ehr"
+   ],
+   [
+    "ad",
+    "lis"
+   ],
+   [
+    "ad",
+    "sched"
+   ],
+   [
+    "ad",
+    "pacs"
+   ],
+   [
+    "db",
+    "ehr"
+   ],
+   [
+    "db",
+    "lis"
+   ],
+   [
+    "db",
+    "sched"
+   ],
+   [
+    "fw",
+    "portal"
+   ],
+   [
+    "sched",
+    "portal"
+   ],
+   [
+    "ehr",
+    "s_reg"
+   ],
+   [
+    "ehr",
+    "s_bill"
+   ],
+   [
+    "lis",
+    "s_lab"
+   ],
+   [
+    "pacs",
+    "s_lab"
+   ],
+   [
+    "sched",
+    "s_opd"
+   ],
+   [
+    "portal",
+    "s_online"
+   ]
+  ],
+  "findings": [
+   [
+    "f1",
+    "SMB signing not required on domain controller",
+    "ad",
+    8.1,
+    "internal",
+    "Greenbone"
+   ],
+   [
+    "f2",
+    "VPN appliance firmware with known RCE",
+    "fw",
+    9.8,
+    "internet",
+    "Nessus import"
+   ],
+   [
+    "f3",
+    "Database server missing 6 months of patches",
+    "db",
+    7.8,
+    "internal",
+    "Wazuh"
+   ],
+   [
+    "f4",
+    "Portal login allows unlimited password attempts",
+    "portal",
+    6.5,
+    "internet",
+    "Manual review"
+   ],
+   [
+    "f5",
+    "PACS workstation runs unsupported OS",
+    "pacs",
+    7.5,
+    "unknown",
+    "Asset inventory"
+   ],
+   [
+    "f6",
+    "Backups not tested for restore in 9 months",
+    "nas",
+    5,
+    "isolated",
+    "Manual review"
+   ]
+  ],
+  "owners": [
+   "Ravi (IT lead)",
+   "Meera (sysadmin)",
+   "Vendor: LabSoft"
+  ]
+ },
+ "school": {
+  "label": "School",
+  "org": "Greenfield Public School · 1,200 students · 1 IT staff",
+  "nodes": [
+   [
+    "idp",
+    "Google Workspace accounts",
+    0,
+    90
+   ],
+   [
+    "wifi",
+    "Wi-Fi controller",
+    0,
+    60
+   ],
+   [
+    "srv",
+    "School server",
+    0,
+    85
+   ],
+   [
+    "pay",
+    "Payment gateway link",
+    0,
+    75
+   ],
+   [
+    "sis",
+    "Student info system",
+    1,
+    95
+   ],
+   [
+    "att",
+    "Attendance app",
+    1,
+    70
+   ],
+   [
+    "pp",
+    "Parent portal",
+    1,
+    65
+   ],
+   [
+    "lms",
+    "Learning platform",
+    1,
+    75
+   ],
+   [
+    "web",
+    "School website",
+    1,
+    45
+   ],
+   [
+    "s_att",
+    "Daily attendance",
+    2,
+    80,
+    1
+   ],
+   [
+    "s_rc",
+    "Report cards",
+    2,
+    85,
+    1
+   ],
+   [
+    "s_comm",
+    "Parent communication",
+    2,
+    70,
+    1
+   ],
+   [
+    "s_fee",
+    "Fee collection",
+    2,
+    85,
+    1
+   ],
+   [
+    "s_class",
+    "Online classes",
+    2,
+    65,
+    1
+   ]
+  ],
+  "edges": [
+   [
+    "idp",
+    "sis"
+   ],
+   [
+    "idp",
+    "lms"
+   ],
+   [
+    "idp",
+    "att"
+   ],
+   [
+    "srv",
+    "sis"
+   ],
+   [
+    "srv",
+    "att"
+   ],
+   [
+    "wifi",
+    "att"
+   ],
+   [
+    "wifi",
+    "lms"
+   ],
+   [
+    "sis",
+    "pp"
+   ],
+   [
+    "pay",
+    "pp"
+   ],
+   [
+    "sis",
+    "s_rc"
+   ],
+   [
+    "att",
+    "s_att"
+   ],
+   [
+    "pp",
+    "s_comm"
+   ],
+   [
+    "pp",
+    "s_fee"
+   ],
+   [
+    "lms",
+    "s_class"
+   ],
+   [
+    "web",
+    "s_comm"
+   ]
+  ],
+  "findings": [
+   [
+    "f1",
+    "Admin accounts without 2-step verification",
+    "idp",
+    8.8,
+    "internet",
+    "Workspace audit"
+   ],
+   [
+    "f2",
+    "Parent portal uses outdated TLS and weak ciphers",
+    "pp",
+    6.8,
+    "internet",
+    "Greenbone"
+   ],
+   [
+    "f3",
+    "School server shares student records folder to Everyone",
+    "srv",
+    7.6,
+    "internal",
+    "Manual review"
+   ],
+   [
+    "f4",
+    "Wi-Fi controller default admin password",
+    "wifi",
+    8,
+    "internal",
+    "Greenbone"
+   ],
+   [
+    "f5",
+    "Website CMS plugin with known XSS",
+    "web",
+    6.1,
+    "internet",
+    "WPScan import"
+   ],
+   [
+    "f6",
+    "Attendance app version support status unclear",
+    "att",
+    5.5,
+    "unknown",
+    "Asset inventory"
+   ]
+  ],
+  "owners": [
+   "Anil (IT teacher)",
+   "Office admin",
+   "Vendor: EduSoft"
+  ]
+ },
+ "smb": {
+  "label": "Small business",
+  "org": "Kaveri Home Stores · 2 outlets + online · no dedicated IT",
+  "nodes": [
+   [
+    "mail",
+    "Business email",
+    0,
+    80
+   ],
+   [
+    "rtr",
+    "Router / firewall",
+    0,
+    75
+   ],
+   [
+    "vm",
+    "Cloud server",
+    0,
+    85
+   ],
+   [
+    "nas",
+    "Office NAS",
+    0,
+    60
+   ],
+   [
+    "pos",
+    "Point-of-sale app",
+    1,
+    90
+   ],
+   [
+    "inv",
+    "Inventory database",
+    1,
+    85
+   ],
+   [
+    "shop",
+    "Online store",
+    1,
+    75
+   ],
+   [
+    "acct",
+    "Accounting software",
+    1,
+    80
+   ],
+   [
+    "s_store",
+    "In-store sales",
+    2,
+    95,
+    1
+   ],
+   [
+    "s_online",
+    "Online orders",
+    2,
+    80,
+    1
+   ],
+   [
+    "s_gst",
+    "GST invoicing",
+    2,
+    85,
+    1
+   ],
+   [
+    "s_cust",
+    "Customer support email",
+    2,
+    60,
+    1
+   ]
+  ],
+  "edges": [
+   [
+    "rtr",
+    "pos"
+   ],
+   [
+    "vm",
+    "inv"
+   ],
+   [
+    "vm",
+    "shop"
+   ],
+   [
+    "inv",
+    "pos"
+   ],
+   [
+    "inv",
+    "shop"
+   ],
+   [
+    "nas",
+    "acct"
+   ],
+   [
+    "acct",
+    "s_gst"
+   ],
+   [
+    "pos",
+    "s_store"
+   ],
+   [
+    "pos",
+    "s_gst"
+   ],
+   [
+    "shop",
+    "s_online"
+   ],
+   [
+    "mail",
+    "s_cust"
+   ],
+   [
+    "mail",
+    "s_online"
+   ]
+  ],
+  "findings": [
+   [
+    "f1",
+    "Router remote admin open to the internet",
+    "rtr",
+    9,
+    "internet",
+    "Nmap review"
+   ],
+   [
+    "f2",
+    "Cloud server SSH allows password login",
+    "vm",
+    7.5,
+    "internet",
+    "Lynis import"
+   ],
+   [
+    "f3",
+    "Email lacks DMARC; spoofing possible",
+    "mail",
+    6,
+    "internet",
+    "DNS check"
+   ],
+   [
+    "f4",
+    "Inventory DB backups stored on same server",
+    "inv",
+    6.5,
+    "internal",
+    "Manual review"
+   ],
+   [
+    "f5",
+    "NAS firmware 2 major versions behind",
+    "nas",
+    7.2,
+    "unknown",
+    "Asset inventory"
+   ],
+   [
+    "f6",
+    "Shared admin login on POS terminals",
+    "pos",
+    6.8,
+    "internal",
+    "Manual review"
+   ]
+  ],
+  "owners": [
+   "Owner (Suresh)",
+   "Freelance IT",
+   "Vendor: POSWorks"
+  ]
+ }
+}
