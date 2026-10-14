@@ -3,6 +3,9 @@
 #   bash start.sh            this laptop only
 #   bash start.sh --lan      also machines on your Wi-Fi / network
 #   bash start.sh --public   a public https link anyone on the internet can open (Cloudflare quick tunnel)
+#   Permanent address: create a named tunnel in the Cloudflare dashboard (Zero Trust > Networks > Tunnels), then
+#     CF_TUNNEL_TOKEN=<token> IS_PUBLIC_URL=https://scan.yourdomain.com bash start.sh --public
+#   The quick tunnel's address changes on every restart; a named tunnel keeps the same address.
 # AI model: Cisco Foundation-Sec-8B-Instruct (security-tuned, ~5 GB). Override with IS_MODEL=<ollama model name>.
 cd "$(dirname "$0")"
 PORT="${IS_PORT:-8765}"
@@ -48,7 +51,12 @@ if [ "$PUBLIC" = 1 ]; then
     fi
   fi
   LOG=/tmp/infrasentinel-tunnel.log; : > "$LOG"; URL=""
-  if [ -x "$CF" ]; then
+  if [ -n "$CF_TUNNEL_TOKEN" ] && [ -x "$CF" ]; then
+    if [ -z "$IS_PUBLIC_URL" ]; then echo "Set IS_PUBLIC_URL to your tunnel's address (for example https://scan.yourdomain.com)."; exit 1; fi
+    echo "Starting your named Cloudflare tunnel (permanent address)..."
+    "$CF" tunnel --no-autoupdate run --token "$CF_TUNNEL_TOKEN" >"$LOG" 2>&1 &
+    TUNNEL_PID=$!; URL="$IS_PUBLIC_URL"
+  elif [ -x "$CF" ]; then
     echo "Opening a public link with Cloudflare..."
     "$CF" tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" >"$LOG" 2>&1 &
     TUNNEL_PID=$!

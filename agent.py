@@ -3,9 +3,10 @@
 
 What it does
   Looks at this server's own settings and state, then sends a short report to your
-  InfraSentinel dashboard. It never changes settings, installs packages or scans other machines.
+  InfraSentinel dashboard. It never changes settings or installs packages. The only traffic to other machines is one
+  connection attempt to your router on ports 21 and 23 (skip with --no-network).
 
-What it checks (Linux; basic checks elsewhere)
+What it checks (Linux and Windows in full; macOS: ports, firewall, FileVault, updates, Gatekeeper, SIP, admins, backups)
   - Services open to the network (from the local socket table)
   - SSH: password logins, direct administrator (root) login
   - Waiting security updates, and whether automatic updates are on
@@ -14,6 +15,8 @@ What it checks (Linux; basic checks elsewhere)
   - Extra administrator accounts, size of the admin (sudo) group
   - Empty passwords and readable password files (only when run as root)
   - Whether any backup tool is present
+  - Other devices on the same network (from this machine's neighbour/ARP table) and whether the
+    router accepts insecure Telnet/FTP logins (one connection attempt each; --no-network to skip)
   - Security logs: failed logins and where they come from, root sign-ins,
     failed administrator (sudo) attempts, new accounts, recent system errors
     (a short summary plus up to 15 example lines; use --no-logs to skip)
@@ -27,10 +30,11 @@ Usage
   python3 agent.py --server ... --token ... --install                      # also re-check every 6 hours (cron, current user)
   python3 agent.py --uninstall                                             # remove the schedule and files
   python3 agent.py --dry-run                                               # show the report, send nothing
+  python3 agent.py --server ... --token ... --watch --every 2              # stay running; full re-check every 2 hours
 """
 import argparse, hashlib, ipaddress, json, os, platform, re, shutil, socket, subprocess, sys, time, urllib.request, urllib.error
 
-VERSION = "0.4"
+VERSION = "0.5"
 HOME_DIR = os.path.join(os.path.expanduser("~"), ".infrasentinel")
 
 # port -> (name, dashboard group, severity when open to the network, category, plain risk)
@@ -163,13 +167,16 @@ def pending_updates():
     if shutil.which("apt"):
         code, out = run(["apt", "list", "--upgradable"], 60)
         lines = [l for l in out.splitlines() if "upgradable" in l]
-        return {"manager": "apt", "total": len(lines), "security": sum("-security" in l for l in lines)}
+        sec = [l.split("/")[0] for l in lines if "-security" in l]
+        return {"manager": "apt", "total": len(lines), "security": len(sec), "packages": sec[:25]}
     if shutil.which("dnf") or shutil.which("yum"):
         pm = "dnf" if shutil.which("dnf") else "yum"
         code, out = run([pm, "-q", "check-update"], 120)
         total = len([l for l in out.splitlines() if l.strip() and not l.startswith((" ", "Obsoleting"))])
         code2, sec = run([pm, "-q", "updateinfo", "list", "--security"], 120)
-        return {"manager": pm, "total": total, "security": len([l for l in sec.splitlines() if l.strip()])}
+        rows = [l.split() for l in sec.splitlines() if l.strip()]
+        return {"manager": pm, "total": total, "security": len(rows),
+                "packages": sorted({r[-1] for r in rows if r})[:25], "advisories": sorted({r[0] for r in rows if r})[:25]}
     return None
 
 
@@ -653,7 +660,9 @@ def check(as_root, logs=True):
         if up["security"] > 0:
             add("sec-updates", f"{up['security']} security patches are waiting to be installed", 8.5 if up["security"] >= 10 else 7.5,
                 "patches", "internal", manager=up["manager"], waiting_security=up["security"], waiting_total=up["total"],
-                note="Based on the last package list refresh on this server.")
+                affected_software=up.get("packages", []), advisories=up.get("advisories", []),
+                note="Each listed package has a published security fix (known vulnerabilities) that is not installed yet. "
+                     "Based on the last package list refresh on this server.")
         elif up["total"] >= 30:
             add("updates", f"{up['total']} software updates are waiting; the system is getting out of date", 5.0, "outdated",
                 manager=up["manager"], waiting_total=up["total"])
@@ -727,6 +736,184 @@ def check(as_root, logs=True):
             "logs": digest}
 
 
+# ---------- other devices on the network (read-only) ----------
+def default_gateway():
+    if os.name == "nt":
+        out = ps("(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric | Select-Object -First 1).NextHop", 20)
+        return out.strip() or None
+    code, out = run(["ip", "route", "show", "default"], 5)
+    m = re.search(r"default via (\S+)", out or "")
+    if m:
+        return m.group(1)
+    code, out = run(["route", "-n", "get", "default"], 5)        # macOS
+    m = re.search(r"gateway:\s*(\S+)", out or "")
+    return m.group(1) if m else None
+
+
+def neighbours():
+    """Devices this machine has recently talked to on the local network (its ARP / neighbour table)."""
+    found = {}
+    code, out = run(["ip", "neigh"], 5)
+    for line in (out or "").splitlines():
+        m = re.match(r"(\d+\.\d+\.\d+\.\d+) .*lladdr ([0-9a-f:]{17})", line, re.I)
+        if m and "FAILED" not in line:
+            found[m.group(1)] = m.group(2).lower()
+    if not found:
+        code, out = run(["arp", "-a"], 10)                         # Windows / macOS
+        for line in (out or "").splitlines():
+            m = re.search(r"(\d+\.\d+\.\d+\.\d+)\)?\s+(?:at\s+)?([0-9a-f]{1,2}(?:[:-][0-9a-f]{1,2}){5})", line, re.I)
+            if m:
+                found[m.group(1)] = m.group(2).lower().replace("-", ":")
+    out = []
+    for ip, mac in found.items():
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if a.is_private and not a.is_multicast and not ip.endswith(".255") and mac not in ("ff:ff:ff:ff:ff:ff", "00:00:00:00:00:00"):
+            out.append({"ip": ip, "mac": mac})
+    return sorted(out, key=lambda d: tuple(int(x) for x in d["ip"].split(".")))[:60]
+
+
+def port_open(host, port, timeout=1.5):
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def add_network_findings(report):
+    """Adds what this machine can see of its local network. Read-only; contacts only the router."""
+    findings = report["findings"]
+
+    def add(fid, title, severity, category, **details):
+        details["category"] = category
+        findings.append({"id": fid, "title": title, "severity": severity, "exposure": "network", "asset": "host", "details": details})
+    gw = default_gateway()
+    devs = neighbours()
+    mine = set(str(report.get("ip", "")).replace(" ", "").split(","))
+    others = [d for d in devs if d["ip"] != gw and d["ip"] not in mine]
+    report["network"] = {"gateway": gw, "devices": others[:60]}
+    if gw:
+        try:
+            private_gw = ipaddress.ip_address(gw).is_private
+        except ValueError:
+            private_gw = False
+        if private_gw:
+            if port_open(gw, 23):
+                add("router-telnet", f"Your router ({gw}) accepts Telnet logins, which are sent unencrypted", 7.5, "encryption",
+                    device=gw, port=23, risk="anyone on your Wi-Fi can read the router password and take over the network",
+                    how="Turn off Telnet in the router's admin page (often under Administration or Remote management). Ask your internet provider if you can't find it.")
+            if port_open(gw, 21):
+                add("router-ftp", f"Your router ({gw}) has unencrypted file sharing (FTP) turned on", 6.0, "encryption",
+                    device=gw, port=21, risk="files and the FTP password travel unencrypted on your network")
+    if len(others) >= 3:
+        add("unchecked-devices", f"{len(others)} other devices on your network are not being checked", 3.5, "segmentation",
+            devices=[d["ip"] for d in others[:20]],
+            risk="printers, cameras, phones and smart TVs share this network; one weak device can be used to reach the rest",
+            how="Install the checker on the computers you own. Put cameras, smart TVs and guest phones on a separate guest Wi-Fi.",
+            note="Seen in this computer's recent network table; devices that haven't talked to it recently are not listed.")
+    return report
+
+
+# ---------- macOS ----------
+def check_macos(as_root, logs=True):
+    ver = platform.mac_ver()[0] or platform.release()
+    os_name = f"macOS {ver}"
+    ips = [i for i in ip_addresses() if ":" not in i] or ip_addresses()
+    public = has_public_ip(ips)
+    net_expo = "internet" if public else "network"
+    findings, services, skipped = [], [], []
+
+    def add(fid, title, severity, category, exposure="internal", asset="host", **details):
+        details["category"] = category
+        findings.append({"id": fid, "title": title, "severity": severity, "exposure": exposure, "asset": asset, "details": details})
+
+    socks = listeners()
+    code, txt = run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"], 15)
+    for line in (txt or "").splitlines()[1:]:
+        m = re.search(r"\s(\S+):(\d+) \(LISTEN\)", line)
+        if m:
+            p = int(m.group(2))
+            socks[p] = socks.get(p, False) or not (m.group(1).startswith("127.") or m.group(1) in ("[::1]", "localhost"))
+    for p, exposed in sorted(socks.items()):
+        name, group, sev, cat, why = PORTS.get(p, (f"Service on port {p}", "other", 4.0, "misconfig",
+                                                     "an unidentified service; check what it is and whether it is needed"))
+        services.append({"port": p, "name": name, "cat": group, "exposed": bool(exposed)})
+        if exposed and p in PORTS and p not in EXPECTED_WEB:
+            add(f"port{p}", f"{name} is open to the network (port {p})", sev, cat, net_expo, f"svc:{p}", port=p, risk=why,
+                how="System Settings > General > Sharing: turn off what you don't use")
+
+    code, out = run(["/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate"], 10)
+    if out and "enabled" not in out.lower():
+        add("firewall", "The macOS firewall is turned off", 5.5 if any(socks.values()) else 4.0, "misconfig", net_expo,
+            how="System Settings > Network > Firewall > turn on")
+    elif not out:
+        skipped.append("firewall state")
+    code, out = run(["fdesetup", "status"], 10)
+    if out and "FileVault is Off" in out:
+        add("disk-encryption", "The disk is not encrypted (FileVault is off)", 6.5, "encryption",
+            risk="if this Mac is lost or stolen, its files can be read", how="System Settings > Privacy & Security > FileVault > Turn On")
+    code, out = run(["spctl", "--status"], 10)
+    if out and "disabled" in out:
+        add("gatekeeper", "Gatekeeper is off, so unverified apps can run without warning", 6.0, "thirdparty",
+            how="Run 'sudo spctl --master-enable' or ask your IT person")
+    code, out = run(["csrutil", "status"], 10)
+    if out and "disabled" in out.lower():
+        add("sip", "System Integrity Protection is turned off", 7.0, "misconfig",
+            risk="malware can change protected parts of macOS", how="Needs Recovery Mode; ask your IT person to turn it back on")
+    code, out = run(["softwareupdate", "-l"], 150)
+    labels = re.findall(r"\* Label: (.+)", out or "")
+    if labels:
+        sec = [l for l in labels if re.search(r"security|macos|background|xprotect|rapid", l, re.I)]
+        add("sec-updates" if sec else "updates", f"{len(labels)} macOS update(s) are waiting to be installed",
+            7.5 if sec else 5.0, "patches" if sec else "outdated", affected_software=labels[:15],
+            how="System Settings > General > Software Update")
+    elif code is None:
+        skipped.append("pending updates")
+    code, out = run(["defaults", "read", "/Library/Preferences/com.apple.SoftwareUpdate", "CriticalUpdateInstall"], 10)
+    if out.strip() == "0":
+        add("auto-updates", "Automatic security responses and system files are turned off", 4.5, "outdated",
+            how="System Settings > General > Software Update > Automatic updates (i) > turn on 'Install Security Responses and system files'")
+    try:
+        major = int(ver.split(".")[0])
+        if major < 14:
+            add("os-eol", f"Unsupported OS: {os_name} no longer receives regular security updates", 8.0, "unsupporteddev",
+                reason="Apple usually patches only the three newest macOS versions", note="Based on Apple's usual support pattern.")
+    except ValueError:
+        pass
+    code, out = run(["dscl", ".", "-read", "/Groups/admin", "GroupMembership"], 10)
+    admins = [a for a in (out or "").replace("GroupMembership:", "").split() if a not in ("root",)]
+    if len(admins) > 3:
+        add("admins", f"{len(admins)} people can act as administrator", 4.0, "excessive", count=len(admins))
+    code, out = run(["tmutil", "latestbackup"], 15)
+    if code not in (0, None) or not (out or "").strip():
+        add("backups", "No recent Time Machine backup was found", 5.5, "backups",
+            note="If you back up another way (for example iCloud Drive or a backup app), mark this as not applicable.",
+            how="System Settings > General > Time Machine > Add Backup Disk")
+    if logs:
+        skipped.append("security logs (not read on macOS yet)")
+    return {"agent_version": VERSION, "agent_id": agent_id(), "hostname": socket.gethostname(), "os": os_name,
+            "ip": ", ".join(ips[:4]), "public_ip": public, "as_root": as_root,
+            "checked_at": int(time.time()), "services": services, "findings": findings, "skipped": skipped, "logs": None}
+
+
+def full_check(as_root, logs=True, network=True):
+    if os.name == "nt":
+        rep = check_windows(as_root, logs)
+    elif sys.platform == "darwin":
+        rep = check_macos(as_root, logs)
+    else:
+        rep = check(as_root, logs)
+    if network:
+        try:
+            add_network_findings(rep)
+        except Exception:
+            rep["skipped"].append("network devices")
+    return rep
+
+
 def poll(server, token, aid):
     req = urllib.request.Request(server.rstrip("/") + "/api/agent/poll", data=json.dumps({"agent_id": aid}).encode(),
                                  headers={"Content-Type": "application/json", "X-Enroll-Token": token}, method="POST")
@@ -734,8 +921,8 @@ def poll(server, token, aid):
         return bool(json.loads(r.read()).get("scan"))
 
 
-def watch(server, token, as_root, logs, quiet):
-    """Stay running: re-check when someone presses 'Scan now' on the dashboard, and every 6 hours."""
+def watch(server, token, as_root, logs, quiet, network=True, every=6.0):
+    """Stay running: re-check when someone presses 'Scan now' on the dashboard, and every few hours."""
     say = (lambda *a: None) if quiet else (lambda *a: print(*a, flush=True))
     aid, last_full, fails = agent_id(), time.time(), 0
     say("Listening for 'Scan now' from your dashboard. Close this window or press Ctrl+C to stop.")
@@ -743,9 +930,9 @@ def watch(server, token, as_root, logs, quiet):
         try:
             want = poll(server, token, aid)
             fails = 0
-            if want or time.time() - last_full > 6 * 3600:
+            if want or time.time() - last_full > every * 3600:
                 say(time.strftime("%H:%M") + "  " + ("Scan requested from the dashboard. Checking…" if want else "Scheduled check…"))
-                rep = check(as_root, logs=logs); rep["watch"] = True
+                rep = full_check(as_root, logs=logs, network=network); rep["watch"] = True
                 send(server, token, rep)
                 last_full = time.time()
                 say(time.strftime("%H:%M") + f"  Sent: {len(rep['findings'])} problem(s) found.")
@@ -816,23 +1003,24 @@ def install_linux_watch(server, token):
 
 def install_windows(server, token, watch_mode=False):
     os.makedirs(HOME_DIR, exist_ok=True)
-    target = os.path.join(HOME_DIR, "agent.py")
-    shutil.copyfile(os.path.abspath(__file__), target)
+    frozen = getattr(sys, "frozen", False)          # running as the ready-made infrasentinel-agent.exe
+    target = os.path.join(HOME_DIR, "infrasentinel-agent.exe" if frozen else "agent.py")
+    shutil.copyfile(sys.executable if frozen else os.path.abspath(__file__), target)
     cfg = os.path.join(HOME_DIR, "config.json")
     with open(cfg, "w") as f:
         json.dump({"server": server, "token": token}, f)
     py = sys.executable.replace("python.exe", "pythonw.exe") if os.path.exists(sys.executable.replace("python.exe", "pythonw.exe")) else sys.executable
     if watch_mode:
-        tr = f'"{py}" "{target}" --config "{cfg}" --watch --quiet'
+        tr = (f'"{target}"' if frozen else f'"{py}" "{target}"') + f' --config "{cfg}" --watch --quiet'
         code, out = run(["schtasks", "/Create", "/F", "/SC", "ONLOGON", "/TN", "InfraSentinelAgent", "/TR", tr], 30)
         if code == 0:
             run(["schtasks", "/Run", "/TN", "InfraSentinelAgent"], 30)
             print(f"Installed: {target}\nIt is running in the background now and starts again whenever you sign in to Windows,\n"
-                  f"so the dashboard can scan this PC any time.\nTo remove it:  python \"{target}\" --uninstall")
+                  f"so the dashboard can scan this PC any time.\nTo remove it:  " + (f'"{target}"' if frozen else f'python "{target}"') + " --uninstall")
         else:
             print("Could not add the scheduled task (try a Terminal opened as administrator). You can keep this window open instead.")
         return
-    tr = f'"{py}" "{target}" --config "{cfg}" --quiet'
+    tr = (f'"{target}"' if frozen else f'"{py}" "{target}"') + f' --config "{cfg}" --quiet'
     code, out = run(["schtasks", "/Create", "/F", "/SC", "HOURLY", "/MO", "6", "/TN", "InfraSentinelAgent", "/TR", tr], 30)
     if code == 0:
         print(f"Installed: {target}\nIt will re-check this PC every 6 hours (Task Scheduler: InfraSentinelAgent).\n"
@@ -863,6 +1051,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--no-logs", action="store_true", help="do not read or send any log information")
     ap.add_argument("--watch", action="store_true", help="keep running so the dashboard can request a scan ('Scan now')")
+    ap.add_argument("--every", type=float, default=6.0, help="with --watch: hours between automatic full checks (default 6)")
+    ap.add_argument("--no-network", action="store_true", help="do not look at other devices on the network or contact the router")
     a = ap.parse_args()
     if a.uninstall:
         return uninstall()
@@ -872,7 +1062,7 @@ def main():
     as_root = is_admin()
     if not a.quiet:
         print(f"InfraSentinel agent {VERSION}: checking {socket.gethostname()} (read-only)…")
-    report = check(as_root, logs=not a.no_logs)
+    report = full_check(as_root, logs=not a.no_logs, network=not a.no_network)
     if a.watch:
         report["watch"] = True
     if a.dry_run:
@@ -899,7 +1089,7 @@ def main():
     if a.install:
         install(a.server, a.token, a.watch)
     elif a.watch:
-        watch(a.server, a.token, as_root, not a.no_logs, a.quiet)
+        watch(a.server, a.token, as_root, not a.no_logs, a.quiet, not a.no_network, max(0.25, a.every))
 
 
 if __name__ == "__main__":

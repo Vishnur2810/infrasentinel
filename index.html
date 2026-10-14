@@ -326,9 +326,10 @@ function critInfo(id){ // asset inherits the highest criticality among services 
   for(const s of Object.keys(impact(id))){const ns=node(s);if(ns.svc&&ns.crit>C){C=ns.crit;from=s}}
   return{C,own,from};
 }
+var W=window.IS_WEIGHTS||[0.4,0.3,0.3];  /* severity, exposure, criticality: set on the server with IS_WEIGHTS */
 function score(f,mod={}){
   const S=Math.round(f[3]*10*(mod.sevMul??1)),ek=mod.expo??f[4],Eraw=EXPO[ek],E=Eraw==null?50:Eraw,ci=critInfo(f[2]),C=ci.C;
-  return{S,E,C,ci,unknown:Eraw==null,R:Math.round(0.4*S+0.3*E+0.3*C)};
+  return{S,E,C,ci,unknown:Eraw==null,R:Math.round(W[0]*S+W[1]*E+W[2]*C)};
 }
 function missing(f,s,svcs){const m=[];
   if(s.unknown)m.push("Network exposure not confirmed");
@@ -378,11 +379,11 @@ function renderDetail(){
    <div class="catchip">Category: ${esc(VNAME[classify(f)])}</div>
    <div class="adv"><div style="display:flex;gap:16px;align-items:flex-end;margin-top:12px"><div class="big">${s.R}</div><div class="muted" style="font-size:12px;padding-bottom:4px">of 100<br>deterministic, reproducible</div></div>
    <div class="bars">
-    ${bar("Severity",s.S,"0.4",`CVSS ${f[3].toFixed(1)} from scanner`)}
-    ${bar("Exposure",s.E,"0.3",s.unknown?"Unknown: shown as 50 and flagged, never assumed low":EXPO_LBL[f[4]],s.unknown)}
-    ${bar("Criticality",s.C,"0.3",s.ci.from?`Inherited from ${esc(node(s.ci.from).name)} (own value ${s.ci.own})`:`Own criticality of ${esc(n.name)}, no more critical service depends on it`)}
+    ${bar("Severity",s.S,String(W[0]),`CVSS ${f[3].toFixed(1)} from scanner`)}
+    ${bar("Exposure",s.E,String(W[1]),s.unknown?"Unknown: shown as 50 and flagged, never assumed low":EXPO_LBL[f[4]],s.unknown)}
+    ${bar("Criticality",s.C,String(W[2]),s.ci.from?`Inherited from ${esc(node(s.ci.from).name)} (own value ${s.ci.own})`:`Own criticality of ${esc(n.name)}, no more critical service depends on it`)}
    </div>
-   <div class="formula">R = 0.4·${s.S} + 0.3·${s.E} + 0.3·${s.C} = ${(0.4*s.S+0.3*s.E+0.3*s.C).toFixed(1)} → ${s.R}</div></div>
+   <div class="formula">R = ${W[0]}·${s.S} + ${W[1]}·${s.E} + ${W[2]}·${s.C} = ${(W[0]*s.S+W[1]*s.E+W[2]*s.C).toFixed(1)} → ${s.R}</div></div>
    <div class="explain"><div class="eyebrow">Plain-language explanation</div>
     <p>${esc(n.name)} has a ${f[3]>=9?"critical":f[3]>=7?"serious":"moderate"} weakness: ${esc(f[1].toLowerCase())}. It is ${s.unknown?"<b>not yet known</b> whether it is reachable from outside, so confirm its network exposure first":EXPO_LBL[f[4]].toLowerCase()+" "+(f[4]==="internet"?"so anyone online can try to reach it":f[4]==="network"?"so anyone on the same Wi-Fi or LAN can try to reach it":"so an attacker would need a foothold inside first")}.
     ${svcs.length?`If it were compromised or went offline, these ${svcs.length} services depend on it: <b>${svcs.map(esc).join(", ")}</b>.`:"No business service currently depends on it in the recorded map."}</p>

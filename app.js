@@ -64,6 +64,37 @@
   .srcs a small{color:var(--muted);flex:none}
   .srcs a:hover span{text-decoration:underline}
   a.cite{display:inline-block;font:700 11px var(--f-body);color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:0 5px;margin:0 1px;text-decoration:none;vertical-align:1px}
+  .difline{font-size:12px;margin-top:3px;color:var(--muted)}
+  .difline .ok{color:var(--low);font-weight:600}.difline .nw{color:var(--crit);font-weight:600}
+  .verified{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .verified h3{margin:0 0 6px;font-size:14px}
+  .verified ul{margin:0;padding:0;list-style:none;display:grid;gap:5px;font-size:13px}
+  .verified li::before{content:"✓";color:var(--low);font-weight:700;margin-right:8px}
+  .verified small{color:var(--muted)}
+  .fpr{font:11.5px var(--f-mono);color:var(--muted);word-break:break-all}
+  .codebox.risky{outline:2px solid var(--crit);outline-offset:2px}
+  .riskcmd{font-size:13px;border-left:3px solid var(--crit);background:var(--crit-soft,rgba(255,59,48,.1));padding:7px 10px;border-radius:0 6px 6px 0;margin:6px 0}
+  .lockcmd{font-size:13px;border-left:3px solid var(--med);background:var(--med-soft);padding:7px 10px;border-radius:0 6px 6px 0;margin:6px 0}
+  .checked{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;background:var(--bg)}
+  .checked h4{margin:0 0 6px;font-size:13px;display:flex;gap:8px;align-items:center}
+  .checked h4 span{font:600 11px var(--f-body);color:var(--low);background:rgba(52,199,89,.14);padding:2px 8px;border-radius:999px}
+  .checked ol{margin:0 0 6px;padding-left:20px;font-size:14px;line-height:1.6}
+  .checked .muted{font-size:13px}
+  .aiwarn{font:600 11px var(--f-body);color:var(--med);margin-left:8px}
+  .sec-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .sec-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:8px;align-content:start;min-width:0}
+  .sec-card h3{margin:0;font-size:15px}
+  .sec-card p{margin:0;font-size:13px;color:var(--muted)}
+  .sec-card input{font:14px var(--f-body);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box}
+  .sec-card a.btn{text-decoration:none}
+  .sec-card .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pill{display:inline-block;font:600 12px var(--f-body);padding:2px 9px;border-radius:999px;background:var(--line)}
+  .pill.on{background:rgba(52,199,89,.16);color:var(--low)}
+  #qr{background:#fff;padding:8px;border-radius:8px;width:max-content}
+  .secret{font:13px var(--f-mono);letter-spacing:.06em;word-break:break-all}
+  .secmsg{font-size:13px}
+  .procontact{display:block;margin-top:6px;font-weight:600}
+  @media (max-width:800px){.sec-grid{grid-template-columns:1fr}}
   @media (prefers-reduced-motion:reduce){.live::before,.spin{animation:none}.chat{scroll-behavior:auto}}
   @media (max-width:800px){.steps3{grid-template-columns:1fr}.askrow{grid-template-columns:1fr}}`;
   const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
@@ -100,6 +131,7 @@
           <span style="flex:1"></span>
           <button class="linkbtn" id="resetTok" type="button">Reset access code</button>
         </div>
+        <div class="fpr" id="fpr"></div>
         <div id="lanNote"></div>
         <div class="src">The command downloads the checker from this dashboard and runs it once. Add <code>--dry-run</code> to see exactly what it would send, or <code>--no-logs</code> to skip log reading. To remove a scheduled checker, run the checker again with <code>--uninstall</code>.</div>
       </div>
@@ -181,17 +213,23 @@
     $("step1t").textContent = win ? "Open PowerShell" : "Open the server";
     $("step1p").innerHTML = win
       ? (($("optSudo").checked ? "Right-click Start and choose <b>Terminal (Admin)</b>. " : "Press Start, type <b>cmd</b> or <b>PowerShell</b> and open it. ") +
-         "The command works in either. It needs Python 3 from python.org (tick “Add python.exe to PATH” when installing).")
+         "The command works in either. If Python isn't installed, it downloads the ready-made Windows program instead.")
       : "Open a terminal on the server you want to check. It needs Python 3, which most Linux servers and Macs already have.";
     $("step3p").textContent = $("optWatch").checked
       ? ($("optInstall").checked ? "Results appear here in a few seconds. It keeps running in the background, so you can press “Scan now” any time."
                                  : "Results appear here in a few seconds. Leave that window open, and you can press “Scan now” here any time.")
       : "Problems and simple fixes appear on this page within a few seconds.";
     $("optSudoTxt").textContent = win ? "Include administrator-only checks (sign-in logs, disk encryption, SMBv1)" : "Include administrator-only checks (asks for the server's password)";
+    const args = `--server ${url} --token ${info.token}${inst}`, h = info.sha256;
+    // Every command checks the downloaded checker against its published SHA-256 fingerprint before running it.
     $("cmd").textContent = win
-      ? (() => { const run = `infrasentinel-agent.py --server ${url} --token ${info.token}${inst}`;
-          return `powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; Set-Location ([IO.Path]::GetTempPath()); irm ${url}/agent.py -OutFile infrasentinel-agent.py; if (Get-Command py -EA 0) { py ${run} } elseif (Get-Command python -EA 0) { python ${run} } else { Write-Host 'Python 3 is needed. Install it from https://www.python.org/downloads/ (tick Add python.exe to PATH), then run this again.' }"`; })()
-      : `curl -fsSL ${url}/agent.py -o infrasentinel-agent.py && ${$("optSudo").checked ? "sudo " : ""}python3 infrasentinel-agent.py --server ${url} --token ${info.token}${inst}`;
+      ? `powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; Set-Location ([IO.Path]::GetTempPath()); ` +
+        `if ((Get-Command py -EA 0) -or (Get-Command python -EA 0)) { irm ${url}/agent.py -OutFile infrasentinel-agent.py; ` +
+        `if ((Get-FileHash infrasentinel-agent.py -Algorithm SHA256).Hash -ne '${h}') { Write-Host 'Safety check failed: the downloaded checker does not match its fingerprint. It was NOT run.' } ` +
+        `elseif (Get-Command py -EA 0) { py infrasentinel-agent.py ${args} } else { python infrasentinel-agent.py ${args} } } ` +
+        `else { irm '${info.exe_url}' -OutFile infrasentinel-agent.exe; .\\infrasentinel-agent.exe ${args} }"`
+      : `curl -fsSL ${url}/agent.py -o infrasentinel-agent.py && python3 -c "import hashlib,sys;sys.exit(hashlib.sha256(open('infrasentinel-agent.py','rb').read()).hexdigest()!='${h}' and 'Safety check failed: the checker does not match its fingerprint. Not run.')" && ${$("optSudo").checked ? "sudo " : ""}python3 infrasentinel-agent.py ${args}`;
+    $("fpr").textContent = `Checker fingerprint (SHA-256): ${h}. The command refuses to run a file that doesn't match.` + (win ? " Without Python, it uses the ready-made Windows program from the project's GitHub releases." : "");
     $("lanNote").innerHTML = info.public ? `<div class="src">This command uses your public link, so it works on servers anywhere on the internet.</div>` : info.lan ? "" :
       `<div class="warnnote">This address works for a checker on <b>this laptop</b> only. To connect a machine elsewhere, restart with <code>bash start.sh --public</code> (anywhere on the internet) or <code>bash start.sh --lan</code> (same network), then copy the command again.</div>`;
   }
@@ -252,7 +290,25 @@
   }
 
   /* ---------- server list ---------- */
+  function diffLine(h) {
+    const d = h.diff; if (!d) return "";
+    const fx = (d.fixed || []).length, nw = (d.new || []).length;
+    if (!fx && !nw) return `<div class="difline">No change since the last check</div>`;
+    return `<div class="difline">Since last check: ${fx ? `<span class="ok">${fx} fixed ✓</span>` : ""}${fx && nw ? " · " : ""}${nw ? `<span class="nw">${nw} new</span>` : ""}</div>`;
+  }
+  let verifiedCount = 0;
+  function renderVerified(hosts) {
+    const all = [];
+    hosts.forEach(h => (h.resolved || []).forEach(r => all.push({ ...r, host: h.hostname })));
+    all.sort((a, b) => b.fixed_at - a.fixed_at);
+    verifiedCount = all.length;
+    let box = $("verifiedBox");
+    if (!box) { box = document.createElement("div"); box.id = "verifiedBox"; sec.appendChild(box); }
+    box.innerHTML = all.length ? `<div class="verified"><h3>Verified fixes</h3><div class="muted" style="font-size:12px;margin-bottom:8px">Confirmed automatically: the problem was found before and is gone in the newest check.</div>
+      <ul>${all.slice(0, 8).map(r => `<li>${esc(r.title)} <small>· ${esc(r.host)} · ${new Date(r.fixed_at * 1000).toLocaleDateString()}</small></li>`).join("")}</ul></div>` : "";
+  }
   function renderHosts(hosts) {
+    renderVerified(hosts);
     if (!hosts.length) {
       $("hostRows").innerHTML = `<tr><td colspan="5" class="muted">No servers connected yet. Press "Scan this laptop" or "Connect a server" to add your first one.</td></tr>`;
       return;
@@ -263,7 +319,7 @@
       <td><b>${esc(h.hostname)}</b><div class="src">${esc(h.ip || "")}</div>${logLine(h.logs)}</td>
       <td>${esc(h.os || "")}${h.as_root ? "" : `<div class="src">Basic checks · run with administrator option for more</div>`}</td>
       <td>${ago(h.received_at)}${h.online ? `<div class="online">Online</div>` : ""}</td>
-      <td>${h.findings ? `<b>${h.findings}</b> to review` : `<span class="hostok">None found</span>`}</td>
+      <td>${h.findings ? `<b>${h.findings}</b> to review` : `<span class="hostok">None found</span>`}${diffLine(h)}${h.network && h.network.devices ? `<div class="difline">${h.network.devices} other device${h.network.devices === 1 ? "" : "s"} seen on its network</div>` : ""}</td>
       <td style="white-space:nowrap">${h.online ? `<button class="btn mini" data-scan="${esc(h.id)}" type="button"${h.scan_requested || scanning[h.id] ? " disabled" : ""}>${h.scan_requested || scanning[h.id] ? "Scanning…" : "Scan now"}</button><br>` : ""}
         ${h.logs ? `<button class="linkbtn" data-logs="${esc(h.id)}" data-name="${esc(h.hostname)}" type="button">Read logs with AI</button><br>` : ""}
         <button class="linkbtn" data-rm="${esc(h.id)}" type="button">${removing === h.id ? "Click again to remove" : "Remove"}</button></td></tr>`).join("");
@@ -336,6 +392,8 @@
     h = h.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<i>$2</i>");
     return h.replace(/\u0000(\d+)\u0000/g, (m, i) => `<code>${esc(codes[+i])}</code>`);
   }
+  const RISKY = /\brm\s+-[a-z]*[rf]|\bmkfs|\bdd\s+if=|>\s*\/dev\/sd|\bformat\s+[a-z]:|chmod\s+(-R\s+)?0?777|\bufw\s+disable|systemctl\s+(stop|disable|mask)\s+(ufw|firewalld|nftables|unattended)|setenforce\s+0|Set-MpPreference[^\n]*Disable|netsh\s+advfirewall\s+set\s+\w+\s+state\s+off|Set-NetFirewallProfile[^\n]*-Enabled\s+False|Remove-Item[^\n]*-Recurse|\bdel\s+\/[sq]|\brd\s+\/s|(curl|wget)[^|\n]*\|\s*(sudo\s+)?(ba|z)?sh|\b(iwr|irm|Invoke-WebRequest)[^|\n]*\|\s*iex|\buserdel\b|\bdeluser\b|DROP\s+(TABLE|DATABASE)/i;
+  const LOCKOUT = /PasswordAuthentication\s+no|PermitRootLogin\s+no|\bufw\s+(enable|default\s+deny)|iptables\s+-P\s+INPUT\s+DROP|Set-NetFirewallRule|fDenyTSConnections|passwd\s+-l|usermod\s+-L/i;
   function md(t, srcs) {
     t = String(t).replace(/<think>[\s\S]*?(<\/think>|$)/g, "").replace(/\r/g, "");
     const lines = t.split("\n"), out = [];
@@ -352,7 +410,10 @@
         i++;
         while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) body.push(lines[i++]);
         const code = body.join("\n").replace(/^\n+|\n+$/g, "");
-        out.push(`<div class="codebox"><div class="codehead"><span>${esc(lang || "command")}</span><button class="copybtn" type="button">Copy</button></div><pre><code>${esc(code)}</code></pre></div>`);
+        const danger = RISKY.test(code), lock = !danger && LOCKOUT.test(code);
+        if (danger) out.push(`<div class="riskcmd"><b>Careful:</b> this command can delete data or switch off protection. Don't run it unless your IT person has checked it.</div>`);
+        if (lock) out.push(`<div class="lockcmd"><b>Could lock you out:</b> keep a second window or another way into this machine open until you've confirmed you can still sign in.</div>`);
+        out.push(`<div class="codebox${danger ? " risky" : ""}"><div class="codehead"><span>${esc(lang || "command")}</span><button class="copybtn" type="button">Copy</button></div><pre><code>${esc(code)}</code></pre></div>`);
         continue;
       }
       if (!line.trim()) { flush(); continue; }
@@ -409,6 +470,8 @@
     chat.scrollTop = chat.scrollHeight;
     const ctrl = new AbortController(); streaming = ctrl; setBusy(true);
     let text = "", model = "";
+    const pb = body.checked && PLAYBOOK && PLAYBOOK[body.checked];
+    const checkedCard = pb ? `<div class="checked"><h4>Checked steps <span>Reviewed by people</span></h4><ol>${pb.steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol><div class="muted"><b>How to check it worked:</b> ${esc(pb.verify)}</div></div>` : "";
     try {
       const r = await fetch("/api/ai/stream", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, web: useWeb, history: history.slice(-8) }), signal: ctrl.signal });
@@ -419,23 +482,24 @@
       const webState = r.headers.get("X-Web") || "off";
       if (useWeb) ai.querySelector(".aiwait") && (ai.querySelector(".aiwait").lastChild.textContent = srcs.length ? `Read ${srcs.length} web page${srcs.length > 1 ? "s" : ""}. Writing the answer…` : "Couldn't reach web search. Answering from the scan and the model's own knowledge…");
       const ans = document.createElement("div"); ans.className = "ans";
+
       const rd = r.body.getReader(), dec = new TextDecoder();
       let started = false;
       while (true) {
         const { done, value } = await rd.read();
         if (done) break;
         text += dec.decode(value, { stream: true });
-        if (!started && text.trim()) { ai.innerHTML = ""; ai.appendChild(ans); started = true; }
+        if (!started && text.trim()) { ai.innerHTML = checkedCard + (checkedCard ? `<div class="eyebrow" style="margin-bottom:6px">AI explanation for your machine</div>` : ""); ai.appendChild(ans); started = true; }
         const stick = nearBottom(chat);
         ans.innerHTML = md(text, srcs);
         if (stick) chat.scrollTop = chat.scrollHeight;
       }
       if (!started) ai.innerHTML = `<div class="warnnote">The AI returned an empty answer. Try again, or pick another model above.</div>`;
       if (srcs.length) ai.insertAdjacentHTML("beforeend", `<div class="srcs"><b>Sources the AI read</b>${srcs.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer"><small>[${s.n}]</small><span>${esc(s.title)}</span><small>${esc(new URL(s.url).hostname.replace(/^www\./, ""))}</small></a>`).join("")}</div>`);
-      ai.insertAdjacentHTML("beforeend", `<div class="aifoot"><button class="copyans" type="button">Copy answer</button><span class="aimeta">${esc(shortModel(model))} · on this laptop${webState === "ok" ? " · used web sources" : webState === "failed" ? " · web search unavailable" : ""}</span></div>`);
+      ai.insertAdjacentHTML("beforeend", `<div class="aifoot"><button class="copyans" type="button">Copy answer</button><span class="aimeta">AI-written by ${esc(shortModel(model))} · check each step before running it${webState === "ok" ? " · used web sources" : webState === "failed" ? " · web search unavailable" : ""}</span></div>`);
     } catch (e) {
       if (e.name === "AbortError") ai.insertAdjacentHTML("beforeend", `<div class="aimeta">Stopped.</div>`);
-      else ai.innerHTML = `<div class="warnnote">${esc(e.message)}</div>`;
+      else ai.innerHTML = checkedCard + `<div class="warnnote">${esc(e.message)}${checkedCard ? " The checked steps above still apply." : ""}</div>`;
     }
     if (text.trim()) history.push({ role: "user", content: label }, { role: "assistant", content: text });
     if (streaming === ctrl) { streaming = null; setBusy(false); }
@@ -487,7 +551,7 @@
       how_hard: FIXLVL[fi.level][0], call_professional: fi.pro, details: f[6] || null,
       missing_information: typeof missing === "function" ? missing(f, s, svcs) : [] };
     const out = $("aiout"); if (out) out.innerHTML = `<div class="aimeta">The answer is in the "Ask the AI" panel.</div>`;
-    ask({ kind: "explain", evidence }, `Explain this problem in simple words: ${f[1]}`);
+    ask({ kind: "explain", evidence, checked: fi.id }, `Explain this problem in simple words: ${f[1]}`);
   };
 
   /* ---------- Coverage tiles: show the problems, with Ask AI next to each ---------- */
@@ -522,6 +586,9 @@
     if (what) ask({ kind: "chat", question: `In simple words, what is "${what.dataset.what}", why does it matter for a small organization, and how do I protect against it?` },
       `What is "${what.dataset.what}" and how do I protect against it?`);
   });
+
+  let PLAYBOOK = null;
+  fetch("/playbook.json").then(r => r.json()).then(j => { PLAYBOOK = j; }).catch(() => {});
 
   /* ---------- AI model ---------- */
   async function aiCheck() {
@@ -564,6 +631,7 @@
     fixes: '<path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17"/>',
     impact: '<circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.1 7.6l3.8 8.3M16.9 7.6l-3.8 8.3M7.5 6h9"/>',
     coverage: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+    security: '<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
     plans: '<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/>'
   };
   const kpis = document.getElementById("kpis");
@@ -584,6 +652,96 @@
   const plansSec = document.createElement("section"); plansSec.className = "panel"; plansSec.id = "plans";
   fixesSec.after(plansSec);
   const inr = n => "₹" + n.toLocaleString("en-IN");
+
+  /* ---------- Account & security ---------- */
+  const secSec = document.createElement("section"); secSec.className = "panel"; secSec.id = "security";
+  plansSec.after(secSec);
+  let me = {};
+  const post = async (url, body) => {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Something went wrong."); return j;
+  };
+  function loadQR() {
+    return window.QRCode ? Promise.resolve() : new Promise((ok, bad) => {
+      const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+      sc.onload = ok; sc.onerror = bad; document.head.appendChild(sc);
+    });
+  }
+  function renderSecurity(msg) {
+    const c = me.contact || {}, age = me.token_created ? Math.floor((Date.now() / 1000 - me.token_created) / 86400) : null;
+    secSec.innerHTML = `
+      <div class="panel-head"><div><h2>Account &amp; security</h2><div class="muted" style="font-size:13px">Protect this account, choose who to call for serious problems, and control your data.</div></div></div>
+      ${msg ? `<div class="rec secmsg" style="margin-bottom:12px">${msg}</div>` : ""}
+      <div class="sec-grid">
+        <div class="sec-card"><h3>2-step sign-in <span class="pill${me.two_factor ? " on" : ""}">${me.two_factor ? "On" : "Off"}</span></h3>
+          <p>After your password, also enter a 6-digit code from an app on your phone (Google Authenticator, Microsoft Authenticator, etc.).</p>
+          <div id="tfaBox">${me.two_factor
+            ? `<div class="row"><input type="password" id="tfaOffPw" placeholder="Your password" autocomplete="current-password" style="max-width:220px"><button class="btn ghost mini" id="tfaOff" type="button">Turn off</button></div>`
+            : `<button class="btn mini" id="tfaOn" type="button">Turn on</button>`}</div></div>
+        <div class="sec-card"><h3>Who to call for serious problems</h3>
+          <p>Shown on every problem marked “Call a security professional”, so anyone in your team knows who to contact.</p>
+          <input id="ctName" placeholder="Name or company" value="${esc(c.name || "")}">
+          <div class="row"><input id="ctPhone" placeholder="Phone" value="${esc(c.phone || "")}" style="flex:1;min-width:140px"><input id="ctEmail" placeholder="Email" value="${esc(c.email || "")}" style="flex:1;min-width:160px"></div>
+          <div class="row"><button class="btn mini" id="ctSave" type="button">Save contact</button></div></div>
+        <div class="sec-card"><h3>Change password</h3>
+          <input type="password" id="pwOld" placeholder="Current password" autocomplete="current-password">
+          <input type="password" id="pwNew" placeholder="New password (at least 10 characters)" autocomplete="new-password">
+          <div class="row"><button class="btn mini" id="pwSave" type="button">Change password</button></div>
+          <p>Changing it signs you out on every other device.</p></div>
+        <div class="sec-card"><h3>Checker access code</h3>
+          <p>${age == null ? "" : `Created ${age === 0 ? "today" : age + " day" + (age === 1 ? "" : "s") + " ago"}. `}${age != null && age > 90 ? "<b>It's over 90 days old. Reset it and re-run the command on your machines.</b>" : "Reset it if a command was shared with someone it shouldn't have been, and at least every 90 days."}</p>
+          <div class="row"><button class="btn ghost mini" id="goReset" type="button">Go to reset</button></div></div>
+        <div class="sec-card"><h3>Your data</h3>
+          <p>Download everything InfraSentinel stores about your organization, or delete it all. See the <a href="/privacy" target="_blank">privacy notice</a>.</p>
+          <div class="row"><a class="btn ghost mini" href="/api/account/export" download>Download my data</a></div>
+          <div class="row"><input type="password" id="delPw" placeholder="Password to confirm" autocomplete="current-password" style="max-width:220px"><button class="btn stop mini" id="delBtn" type="button">Delete my account</button></div></div>
+      </div>`;
+    const say = (m) => renderSecurity(m);
+    const tOn = $("tfaOn");
+    if (tOn) tOn.onclick = async () => {
+      try {
+        const j = await post("/api/2fa/setup");
+        $("tfaBox").innerHTML = `<p>1. In your authenticator app, add an account and scan this code, or type the key below.</p>
+          <div id="qr"></div><div class="secret">${esc(j.secret.replace(/(.{4})/g, "$1 ").trim())}</div>
+          <p>2. Type the 6-digit code it shows:</p>
+          <div class="row"><input id="tfaCode" inputmode="numeric" maxlength="7" placeholder="123 456" style="max-width:140px"><button class="btn mini" id="tfaConfirm" type="button">Confirm</button></div>`;
+        loadQR().then(() => new QRCode($("qr"), { text: j.uri, width: 160, height: 160 })).catch(() => { $("qr").remove(); });
+        $("tfaConfirm").onclick = async () => {
+          try { await post("/api/2fa/enable", { code: $("tfaCode").value }); me.two_factor = true; say("2-step sign-in is on. You'll need your phone next time you sign in."); }
+          catch (e) { say(esc(e.message)); }
+        };
+      } catch (e) { say(esc(e.message)); }
+    };
+    const tOff = $("tfaOff");
+    if (tOff) tOff.onclick = async () => {
+      try { await post("/api/2fa/disable", { password: $("tfaOffPw").value }); me.two_factor = false; say("2-step sign-in is off."); } catch (e) { say(esc(e.message)); }
+    };
+    $("ctSave").onclick = async () => {
+      try { const j = await post("/api/contact", { name: $("ctName").value, phone: $("ctPhone").value, email: $("ctEmail").value });
+        me.contact = j.contact; say("Contact saved. It now shows on every serious problem."); renderAll(); } catch (e) { say(esc(e.message)); }
+    };
+    $("pwSave").onclick = async () => {
+      try { await post("/api/password", { password: $("pwOld").value, new: $("pwNew").value }); say("Password changed. Other devices were signed out."); }
+      catch (e) { say(esc(e.message)); }
+    };
+    $("goReset").onclick = () => { showSteps(true); $("resetTok").scrollIntoView({ behavior: "smooth", block: "center" }); };
+    let delArm = false;
+    $("delBtn").onclick = async () => {
+      if (!delArm) { delArm = true; $("delBtn").textContent = "This deletes everything. Click again"; setTimeout(() => { delArm = false; const b = $("delBtn"); if (b) b.textContent = "Delete my account"; }, 6000); return; }
+      try { await post("/api/account/delete", { password: $("delPw").value }); location.replace("/login"); } catch (e) { say(esc(e.message)); }
+    };
+  }
+  function decoratePro() {
+    const c = me.contact || {};
+    document.querySelectorAll(".probanner").forEach(b => {
+      if (b.querySelector(".procontact")) return;
+      const el = document.createElement("span"); el.className = "procontact";
+      el.innerHTML = c.name || c.phone || c.email
+        ? `Your contact: ${esc(c.name || "")}${c.phone ? ` · <a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : ""}${c.email ? ` · <a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""}`
+        : `No contact saved yet. Add one under Account &amp; security.`;
+      b.appendChild(el);
+    });
+  }
   function renderPlans(msg) {
     const used = SECTORS.mine ? SECTORS.mine.nodes.filter(n => n[2] === 0).length : 0;
     const cur = PLANS.find(p => p.id === plan) || PLANS[0];
@@ -669,7 +827,8 @@
     { id: "impact", label: "Impact map", target: () => impactSec, full: true },
     { id: "coverage", label: "Coverage", target: () => coverageSec, full: true },
     { group: "Account" },
-    { id: "plans", label: "Plans", target: () => plansSec }
+    { id: "plans", label: "Plans", target: () => plansSec },
+    { id: "security", label: "Security", target: () => secSec }
   ];
   const nav = document.createElement("nav"); nav.className = "is-nav"; nav.setAttribute("aria-label", "Sections");
   nav.innerHTML = `<div class="is-brand"><span class="is-logo"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#fff" stroke-width="2.2"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><circle cx="12" cy="11" r="2.4" fill="#fff"/></svg></span><b>InfraSentinel</b></div>` +
@@ -706,7 +865,10 @@
     const adv = $("advOn"); if (adv) adv.checked = MODE === "full";
     const usedNow = SECTORS.mine ? SECTORS.mine.nodes.filter(n => n[2] === 0).length : 0;
     if (!plansSec.querySelector(".plans") || usedNow !== plansUsed) { plansUsed = usedNow; renderPlans(); }
+    decoratePro();
   };
+  const baseRenderDetail = window.renderDetail;
+  if (typeof baseRenderDetail === "function") window.renderDetail = function () { baseRenderDetail(); decoratePro(); };
 
   // Plain overview numbers in the everyday view; the detailed tiles stay in Advanced
   const baseKPIs = window.renderKPIs;
@@ -719,7 +881,7 @@
     $("kpis").innerHTML =
       tile("Problems to fix", open.length, `on ${nServers} server${nServers === 1 ? "" : "s"}`) +
       tile("Serious", serious, serious ? "fix these first" : "nothing urgent", serious ? "is-bad" : "is-good") +
-      tile("Fixed", f.length - open.length, "with proof recorded", "is-good");
+      tile("Fixed", f.length - open.length + (cur === "mine" ? verifiedCount : 0), cur === "mine" && verifiedCount ? "confirmed by re-scan" : "with proof recorded", "is-good");
   };
   const baseSetMode = window.setMode;
   window.setMode = function (m) { baseSetMode(m); renderAll(); };
@@ -739,7 +901,8 @@
   (async function start() {
     const r = await fetch("/api/me");
     if (r.status === 401) return (location.replace("/login"));
-    const me = await r.json(); shownAs = me.email;
+    me = await r.json(); shownAs = me.email; renderSecurity();
+    try { const c = await (await fetch("/api/config", { cache: "no-store" })).json(); if (Array.isArray(c.weights)) W = c.weights; } catch (e) {}
     plan = me.plan || "free"; billing = me.billing || "monthly"; renderPlans();
     bar.innerHTML = `<span>Signed in as <b>${esc(me.email)}</b> · ${esc(me.org || "")}</span><button class="linkbtn" id="signout" type="button">Sign out</button>`;
     const out = async () => { await fetch("/api/logout", { method: "POST" }); location.replace("/login"); };

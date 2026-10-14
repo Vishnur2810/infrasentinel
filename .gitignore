@@ -1,14 +1,14 @@
-# Runtime data: accounts, passwords, scan results (never commit)
-data/users.json
-data/accounts.json
-data/hosts/
-data/remediation*.json
-data/settings.json
-data/*.tmp
+# Runtime data: accounts, passwords, scan results, keys (never commit)
+data/*
+!data/organizations.json
 
-# Downloaded tools and stray copies
+# Downloaded tools, build output and stray copies
 bin/
+build/
+dist/
+*.spec
 infrasentinel-agent.py
+infrasentinel-agent.exe
 
 # Python / OS / editor
 __pycache__/

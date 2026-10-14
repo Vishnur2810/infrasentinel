@@ -1,0 +1,27 @@
+# Push a tag like v0.5.0 to build the Windows checker (no Python needed) and attach it to a GitHub release.
+#   git tag v0.5.0 && git push origin v0.5.0
+name: Release Windows checker
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyinstaller==6.11.1
+      - run: pyinstaller --onefile --name infrasentinel-agent agent.py
+      - name: Fingerprint
+        shell: pwsh
+        run: (Get-FileHash dist\infrasentinel-agent.exe -Algorithm SHA256).Hash.ToLower() + "  infrasentinel-agent.exe" | Out-File -Encoding ascii dist\infrasentinel-agent.exe.sha256
+      - run: dist\infrasentinel-agent.exe --dry-run --quiet --no-network
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/infrasentinel-agent.exe
+            dist/infrasentinel-agent.exe.sha256

@@ -92,6 +92,9 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .trust svg{width:15px;height:15px;flex:none;stroke:var(--low);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 @media (max-width:860px){.sheet{grid-template-columns:1fr;border-radius:30px}.story{padding:28px 22px}.form{padding:28px 22px;border-left:0;border-top:1px solid var(--line)}h1{font-size:32px}.terminal{display:none}}
 @media (prefers-reduced-motion:reduce){body::before{animation:none}.btn,.seg button{transition:none}}
+.fine{font-size:12px;color:var(--muted);margin:2px 0 0;line-height:1.45}
+.fine a,.legal a{color:var(--accent)}
+.legal{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
 </style></head><body>
 <button class="themebtn" id="themeBtn" type="button"></button>
 <main class="page">
@@ -126,8 +129,10 @@ InfraSentinel agent 0.2: checking web-01 (read-only)…
       <form id="f-in" autocomplete="on">
         <label>Email<input id="in-email" type="email" required autocomplete="username" placeholder="you@organization.com"></label>
         <label>Password<input id="in-pw" type="password" required autocomplete="current-password" placeholder="Your password"></label>
+        <label id="codeRow" hidden>6-digit code from your authenticator app<input id="in-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="123 456"></label>
         <div class="err" id="in-err" hidden></div>
         <button class="btn" id="in-btn" type="submit">Sign in</button>
+        <p class="fine">Forgot your password or lost your phone? Ask the person who runs your InfraSentinel server to reset it.</p>
       </form>
       <form id="f-up" hidden autocomplete="on">
         <label>Organization name<input id="up-org" type="text" required placeholder="e.g. Greenfield Public School"></label>
@@ -140,11 +145,13 @@ InfraSentinel agent 0.2: checking web-01 (read-only)…
           </select></label>
         <label>Email<input id="up-email" type="email" required autocomplete="username" placeholder="you@organization.com"></label>
         <label>Password<input id="up-pw" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+        <p class="fine">By creating an account you agree to the <a href="/terms" target="_blank">Terms</a> and <a href="/privacy" target="_blank">Privacy notice</a>. InfraSentinel gives advice; it does not guarantee your systems are safe.</p>
         <div class="err" id="up-err" hidden></div>
         <button class="btn" id="up-btn" type="submit">Create account</button>
       </form>
       <div class="demo"><span>Demo account <code>demo@example.com</code> / <code>demo1234</code></span><button type="button" class="linkbtn" id="fill-demo">Fill in for me</button></div>
-      <div class="trust"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>Passwords are stored hashed. Sessions end after 12 hours.</div>
+      <div class="trust"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>Passwords are stored hashed. 2-step sign-in available. Sessions end after 12 hours.</div>
+      <div class="legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></div>
     </section>
   </div>
 </main>
@@ -171,11 +178,12 @@ async function post(url,body,errEl,btn,label){
   errEl.hidden=true;btn.disabled=true;btn.textContent="Please wait…";
   try{const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const j=await r.json().catch(()=>({}));
+    if(j.need_code){$("codeRow").hidden=false;$("in-code").required=true;setTimeout(()=>$("in-code").focus(),0)}
     if(!r.ok)throw new Error(j.error||"Something went wrong. Try again.");
     location.href="/";
   }catch(e){errEl.textContent=e.message;errEl.hidden=false;btn.disabled=false;btn.textContent=label}
 }
-$("f-in").addEventListener("submit",e=>{e.preventDefault();post("/api/login",{email:$("in-email").value,password:$("in-pw").value},$("in-err"),$("in-btn"),"Sign in")});
+$("f-in").addEventListener("submit",e=>{e.preventDefault();post("/api/login",{email:$("in-email").value,password:$("in-pw").value,code:$("in-code").value},$("in-err"),$("in-btn"),"Sign in")});
 $("f-up").addEventListener("submit",e=>{e.preventDefault();post("/api/signup",{org:$("up-org").value,type:$("up-type").value,email:$("up-email").value,password:$("up-pw").value},$("up-err"),$("up-btn"),"Create account")});
 </script>
 </body></html>

@@ -1,0 +1,23 @@
+# Always-on InfraSentinel on any Linux server or cloud VM:
+#   docker compose up -d
+#   docker compose exec ollama ollama pull hf.co/mradermacher/Foundation-Sec-8B-Instruct-GGUF:Q4_K_M
+# Then open http://SERVER:8765 (put it behind HTTPS, e.g. a Cloudflare named tunnel or Caddy, before going public).
+services:
+  infrasentinel:
+    build: .
+    restart: unless-stopped
+    ports: ["8765:8765"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      IS_ENCRYPT: "1"                 # encrypt stored data; the key is created in the data volume
+      # IS_PUBLIC_URL: https://scan.yourdomain.com
+      # IS_AI_SLOTS: "2"
+    volumes: ["infrasentinel-data:/data"]
+    depends_on: [ollama]
+  ollama:
+    image: ollama/ollama:0.12.6
+    restart: unless-stopped
+    volumes: ["ollama-models:/root/.ollama"]
+volumes:
+  infrasentinel-data:
+  ollama-models:

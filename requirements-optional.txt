@@ -1,0 +1,3 @@
+# InfraSentinel runs on the Python standard library alone.
+# Optional: encryption at rest (IS_ENCRYPT=1)
+cryptography>=42

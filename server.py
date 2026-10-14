@@ -8,10 +8,11 @@
 - Serves the console, the synthetic demo organizations, a live check of this laptop,
   and plain-language explanations from a local Ollama model.
 
-Standard library only.  Run:  python3 server.py          (this laptop only)
+Standard library only (optional: 'cryptography' for encryption at rest).  Run:  python3 server.py          (this laptop only)
                               python3 server.py --lan    (let other machines on your network connect)
+                              python3 server.py --reset-password EMAIL   (forgotten password / lost 2-step phone)
 """
-import hashlib, hmac, json, os, re, secrets, socket, subprocess, sys, time, urllib.request, webbrowser
+import base64, hashlib, hmac, json, os, re, secrets, socket, sqlite3, struct, subprocess, sys, threading, time, urllib.request, webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
@@ -33,8 +34,18 @@ RECOMMENDED = [
     {"name": "llama3.2:3b", "label": "Llama 3.2 3B (small and fast)", "size": "about 2 GB"},
 ]
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "data")
-ORGS_FILE = os.path.join(DATA, "organizations.json")    # synthetic demo organizations
+DATA = os.path.abspath(os.environ.get("IS_DATA") or os.path.join(HERE, "data"))
+VERSION = "0.5"
+# Risk score weights: severity, exposure, business criticality (must add up to 1). Override: IS_WEIGHTS=0.5,0.3,0.2
+try:
+    WEIGHTS = [float(x) for x in os.environ.get("IS_WEIGHTS", "0.4,0.3,0.3").split(",")][:3]
+    assert len(WEIGHTS) == 3 and abs(sum(WEIGHTS) - 1) < 0.01 and min(WEIGHTS) >= 0
+except Exception:
+    WEIGHTS = [0.4, 0.3, 0.3]
+AI_SLOTS = threading.BoundedSemaphore(max(1, int(os.environ.get("IS_AI_SLOTS", "2"))))   # answers written at the same time
+AGENT_EXE_URL = os.environ.get("IS_AGENT_EXE_URL",
+                               "https://github.com/Vishnur2810/infrasentinel/releases/latest/download/infrasentinel-agent.exe")
+ORGS_FILE = os.path.join(HERE, "data", "organizations.json")    # synthetic demo organizations (read-only, ships with the app)
 USERS_FILE = os.path.join(DATA, "users.json")           # accounts
 ACCOUNTS_FILE = os.path.join(DATA, "accounts.json")     # client organizations + enrollment tokens
 HOSTS_DIR = os.path.join(DATA, "hosts")                 # agent reports, one file per account
@@ -43,25 +54,101 @@ SESSIONS = {}                                           # token -> (email, expir
 MAX_REPORT = 1_000_000
 
 
-# ---------- small JSON store ----------
+# ---------- storage: SQLite database (one file), optional encryption at rest ----------
+# Every record is a JSON document stored under a name like "users.json" or "hosts/acme.json".
+# STORE is held around every read-modify-write, so two requests can't overwrite each other's changes.
+STORE = threading.RLock()
+DB_FILE = os.path.join(DATA, "infrasentinel.db")
+_db = None
+_fernet = None
+
+
+def _cipher():
+    """Encryption at rest, switched on with IS_ENCRYPT=1 (needs: pip install cryptography)."""
+    global _fernet
+    if _fernet is None and os.environ.get("IS_ENCRYPT") == "1":
+        try:
+            from cryptography.fernet import Fernet
+        except ImportError:
+            sys.exit("IS_ENCRYPT=1 needs the 'cryptography' package:  pip install cryptography")
+        key = os.environ.get("IS_DATA_KEY", "").encode()
+        if not key:
+            kf = os.path.join(DATA, "secret.key")
+            if not os.path.exists(kf):
+                os.makedirs(DATA, exist_ok=True)
+                with open(os.open(kf, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as f:
+                    f.write(Fernet.generate_key())
+            key = open(kf, "rb").read().strip()
+        _fernet = Fernet(key)
+    return _fernet
+
+
+def db():
+    global _db
+    with STORE:
+        if _db is None:
+            os.makedirs(DATA, exist_ok=True)
+            _db = sqlite3.connect(DB_FILE, check_same_thread=False, isolation_level=None)
+            _db.execute("PRAGMA journal_mode=WAL")
+            _db.execute("CREATE TABLE IF NOT EXISTS docs (name TEXT PRIMARY KEY, body BLOB NOT NULL, updated INTEGER)")
+            try:
+                os.chmod(DB_FILE, 0o600)
+            except OSError:
+                pass
+        return _db
+
+
+def _name(path):
+    return os.path.relpath(path, DATA).replace(os.sep, "/")
+
+
 def jload(path, default):
+    with STORE:
+        row = db().execute("SELECT body FROM docs WHERE name=?", (_name(path),)).fetchone()
+        if row is None:
+            if os.path.exists(path):            # data from an older version (plain JSON files): move it in once
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        obj = json.load(f)
+                    jsave(path, obj)
+                    legacy = os.path.join(DATA, "legacy-json", _name(path))
+                    os.makedirs(os.path.dirname(legacy), exist_ok=True)
+                    os.replace(path, legacy)
+                    return obj
+                except Exception:
+                    return default
+            return default
+    body = row[0]
+    if isinstance(body, bytes) and body.startswith(b"F1:"):
+        if not _cipher():
+            raise RuntimeError("This data is encrypted. Start the server with IS_ENCRYPT=1 and the same key.")
+        body = _cipher().decrypt(body[3:])
     try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
+        return json.loads(body)
     except Exception:
         return default
 
 
 def jsave(path, obj):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=1)
-    os.replace(tmp, path)
+    body = json.dumps(obj, separators=(",", ":")).encode()
+    if _cipher():
+        body = b"F1:" + _cipher().encrypt(body)
+    with STORE:
+        db().execute("INSERT INTO docs(name, body, updated) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET body=excluded.body, updated=excluded.updated",
+                     (_name(path), body, int(time.time())))
+
+
+def jdelete(path):
+    with STORE:
+        db().execute("DELETE FROM docs WHERE name=?", (_name(path),))
 
 
 def load_orgs():
-    return jload(ORGS_FILE, {})
+    try:
+        with open(ORGS_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def state_file(acct):
@@ -78,7 +165,12 @@ def slug(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:40] or "org"
 
 
-def create_account(org_name, org_type, email, pw):
+def create_account(*a):
+    with STORE:
+        return _create_account(*a)
+
+
+def _create_account(org_name, org_type, email, pw):
     users, accts = jload(USERS_FILE, {}), jload(ACCOUNTS_FILE, {})
     email = email.strip().lower()
     if email in users:
@@ -91,7 +183,7 @@ def create_account(org_name, org_type, email, pw):
     while acct in accts:
         acct += "-" + secrets.token_hex(2)
     accts[acct] = {"name": org_name.strip()[:80], "type": org_type, "token": secrets.token_urlsafe(18),
-                   "created": int(time.time())}
+                   "token_created": int(time.time()), "created": int(time.time())}
     salt, h = hash_pw(pw)
     users[email] = {"acct": acct, "salt": salt, "hash": h, "created": int(time.time())}
     jsave(ACCOUNTS_FILE, accts)
@@ -102,9 +194,83 @@ def create_account(org_name, org_type, email, pw):
 def check_login(email, pw):
     u = jload(USERS_FILE, {}).get(email.strip().lower())
     if not u:
+        hash_pw(pw)                      # same work either way, so timing doesn't reveal which emails exist
         return None
     _, h = hash_pw(pw, u["salt"])
     return email.strip().lower() if hmac.compare_digest(h, u["hash"]) else None
+
+
+# Sign-in protection: after 5 wrong attempts for an email (or 20 from one address) in 15 minutes, wait.
+FAILS = {}
+
+
+def too_many(*keys):
+    now = time.time()
+    for k in keys:
+        FAILS[k] = [t for t in FAILS.get(k, []) if now - t < 900]
+        if len(FAILS[k]) >= (5 if k.startswith("e:") else 20):
+            return True
+    return False
+
+
+def note_fail(*keys):
+    for k in keys:
+        FAILS.setdefault(k, []).append(time.time())
+
+
+# 2-step sign-in: standard 6-digit codes (TOTP, RFC 6238) from Google Authenticator, Microsoft Authenticator, etc.
+def totp(secret, t=None, step=30):
+    key = base64.b32decode(secret.upper() + "=" * (-len(secret) % 8))
+    msg = struct.pack(">Q", int((time.time() if t is None else t) // step))
+    h = hmac.new(key, msg, hashlib.sha1).digest()
+    o = h[-1] & 15
+    return "%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 1_000_000)
+
+
+def totp_ok(secret, code):
+    code = re.sub(r"\s", "", str(code or ""))
+    return bool(secret) and len(code) == 6 and any(hmac.compare_digest(totp(secret, time.time() + d * 30), code) for d in (-1, 0, 1))
+
+
+def end_sessions(email, keep=None):
+    for k, v in list(SESSIONS.items()):
+        if v[0] == email and k != keep:
+            SESSIONS.pop(k, None)
+
+
+def reset_password_cli(email):
+    email = email.strip().lower()
+    with STORE:
+        users = jload(USERS_FILE, {})
+        if email not in users:
+            sys.exit(f"No account for {email}.")
+        pw = secrets.token_urlsafe(9)
+        users[email]["salt"], users[email]["hash"] = hash_pw(pw)
+        users[email].pop("totp", None)
+        users[email].pop("totp_pending", None)
+        jsave(USERS_FILE, users)
+    print(f"Temporary password for {email}:  {pw}\n2-step sign-in was switched off for this account. "
+          "Ask the person to sign in, change the password and turn 2-step sign-in on again.")
+
+
+def account_export(email, acct):
+    a = {k: v for k, v in jload(ACCOUNTS_FILE, {}).get(acct, {}).items() if k != "token"}
+    u = {k: v for k, v in jload(USERS_FILE, {}).get(email, {}).items() if k in ("acct", "created")}
+    return {"exported_at": int(time.time()), "email": email, "user": u, "organization": a,
+            "servers": jload(hosts_file(acct), {}), "fix_list": jload(state_file(acct), {})}
+
+
+def account_delete(email, acct):
+    with STORE:
+        users, accts = jload(USERS_FILE, {}), jload(ACCOUNTS_FILE, {})
+        users.pop(email, None)
+        if not any(u.get("acct") == acct for u in users.values()):
+            accts.pop(acct, None)
+            jdelete(hosts_file(acct))
+            jdelete(state_file(acct))
+        jsave(USERS_FILE, users)
+        jsave(ACCOUNTS_FILE, accts)
+    end_sessions(email)
 
 
 def ensure_demo():
@@ -233,7 +399,7 @@ def hosts_file(acct):
     return os.path.join(HOSTS_DIR, f"{acct}.json")
 
 
-HOSTS_LOCK = __import__("threading").Lock()
+HOSTS_LOCK = STORE
 
 
 def host_id(agent_id):
@@ -241,10 +407,34 @@ def host_id(agent_id):
 
 
 def save_report(acct, rep):
+    """Store a new report and compare it with the previous one: what got fixed (verified), what is new."""
     hid = host_id(rep.get("agent_id")) or secrets.token_hex(6)
     with HOSTS_LOCK:
         hosts = jload(hosts_file(acct), {})
-        rep["received_at"] = rep["last_seen"] = int(time.time())
+        now = int(time.time())
+        rep["received_at"] = rep["last_seen"] = now
+        rep["findings"] = [f for f in rep.get("findings", []) if isinstance(f, dict)][:200]
+        for k in ("diff", "history", "resolved", "first_seen", "scan_requested"):
+            rep.pop(k, None)                # these are worked out here, never taken from the agent
+        prev = hosts.get(hid)
+        new_ids = {str(f.get("id")): str(f.get("title", ""))[:160] for f in rep["findings"]}
+        resolved, first, history = [], {}, []
+        if prev:
+            old_ids = {str(f.get("id")): str(f.get("title", ""))[:160] for f in prev.get("findings", [])}
+            fixed = [{"id": k, "title": v, "fixed_at": now, "first_seen": (prev.get("first_seen") or {}).get(k)}
+                     for k, v in old_ids.items() if k not in new_ids]
+            new = [v for k, v in new_ids.items() if k not in old_ids]
+            resolved = [r for r in prev.get("resolved", []) if r.get("id") not in new_ids and r.get("id") not in old_ids] + fixed
+            rep["diff"] = {"since": prev.get("checked_at"), "fixed": [f["title"] for f in fixed], "new": new[:20],
+                           "still": len(new_ids) - len(new)}
+            first = {k: v for k, v in (prev.get("first_seen") or {}).items() if k in new_ids}
+            history = (prev.get("history") or [])[-29:]
+            rep["watch"] = rep.get("watch") or prev.get("watch")
+        rep["first_seen"] = {k: first.get(k, now) for k in new_ids}
+        rep["resolved"] = resolved[-50:]
+        d = rep.get("diff") or {}
+        rep["history"] = history + [{"t": rep.get("checked_at") or now, "problems": len(new_ids),
+                                     "fixed": len(d.get("fixed", [])), "new": len(d.get("new", []))}]
         hosts[hid] = rep                    # a new report also clears any pending "Scan now" request
         jsave(hosts_file(acct), hosts)
     return hid
@@ -322,6 +512,10 @@ def hosts_sector(acct, name):
                         "skipped": r.get("skipped", [])[:10], "agent_version": r.get("agent_version"),
                         "online": bool(r.get("watch")) and time.time() - r.get("last_seen", 0) < 90,
                         "scan_requested": bool(r.get("scan_requested")),
+                        "diff": r.get("diff"), "resolved": list(reversed(r.get("resolved", [])))[:10],
+                        "history": r.get("history", [])[-10:],
+                        "network": {"gateway": (r.get("network") or {}).get("gateway"),
+                                    "devices": len((r.get("network") or {}).get("devices") or [])} if r.get("network") else None,
                         "logs": {k: lg.get(k) for k in ("source", "failed_logins", "root_logins", "sudo_failures",
                                                          "system_errors_24h", "lines_read")} | {"new_users": len(lg.get("new_users") or [])} if lg else None})
     for c in sorted(cats):
@@ -395,17 +589,33 @@ SYSTEM_PROMPT = (
     "- When something is serious or risky to fix alone (signs of a break-in, critical problems, changes that could lock them out), "
     "clearly recommend contacting a security professional, and say what to do meanwhile.\n"
     "- Only help with protecting systems they own. Do not give instructions for attacking other systems.\n"
+    "- Safety first: never suggest commands that delete files or data, wipe or format disks, turn off the firewall or antivirus, "
+    "disable updates, or make files writable by everyone. Before any step that could lock them out (SSH, firewall, passwords, "
+    "remote desktop), say so and tell them to keep a second way in open. Prefer the settings menu over commands when one exists, "
+    "and always end with how to check it worked (for example 'press Scan now again').\n"
     "- Formatting: use short labelled sections (for example 'What's wrong:'), numbered steps, and paragraphs of 1-3 sentences. "
     "Put every command in its own fenced code block with a language (```bash or ```powershell), one command per line, "
     "with no prompt symbols like $ or >. Never put commands inside a sentence. Do not use tables.")
 
 
+class AIBusy(RuntimeError):
+    pass
+
+
+def ai_slot():
+    if not AI_SLOTS.acquire(timeout=90):
+        raise AIBusy("The AI is busy answering other questions. Please try again in a minute.")
+
+
 def generate(model, prompt, max_tokens):
+    ai_slot()
     try:
         r = ollama("/api/generate", {"model": model, "prompt": prompt, "stream": False,
                                      "options": {"temperature": 0.2, "num_predict": max_tokens, "num_ctx": NUM_CTX}}, timeout=300)
     except Exception:
         raise RuntimeError("The AI helper took too long or stopped. Try again in a moment.")
+    finally:
+        AI_SLOTS.release()
     return r.get("response", "").strip()
 
 
@@ -426,7 +636,10 @@ def scan_context(acct):
             "logs": {k: lg.get(k) for k in ("source", "failed_logins", "top_source_ips", "usernames_tried", "accepted_logins",
                                              "accepted_by_user", "root_logins", "sudo_failures", "new_users",
                                              "system_errors_24h", "top_system_errors")} if lg else "not readable",
-            "checks_skipped": r.get("skipped", [])})
+            "checks_skipped": r.get("skipped", []),
+            "fixed_since_last_check": (r.get("diff") or {}).get("fixed", []),
+            "new_since_last_check": (r.get("diff") or {}).get("new", []),
+            "other_devices_on_network": len((r.get("network") or {}).get("devices") or [])})
     return json.dumps(out, indent=1)[:12000]
 
 
@@ -566,8 +779,35 @@ def _ollama_search(query, n=5):
         return json.loads(r.read()).get("results", [])
 
 
+SEARX = os.environ.get("IS_SEARCH_URL", "").rstrip("/")     # optional: your own SearXNG instance (stable JSON search)
+WEB_CACHE = {}
+
+
+def _searx(query, n=8):
+    try:
+        req = urllib.request.Request(f"{SEARX}/search?" + urllib.parse.urlencode({"q": query, "format": "json"}), headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            j = json.loads(r.read(500_000))
+        return [{"url": x["url"], "title": str(x.get("title", ""))[:140]} for x in j.get("results", [])[:n] if str(x.get("url", "")).startswith("http")]
+    except Exception:
+        return []
+
+
 def web_research(query, n=3):
-    """Search the web and return up to n sources: [{n, title, url, text}]. Never raises."""
+    """Search the web (cached for 6 hours) and return up to n sources: [{n, title, url, text}]. Never raises."""
+    key = query.lower().strip()
+    hit = WEB_CACHE.get(key)
+    if hit and time.time() - hit[0] < 6 * 3600:
+        return [dict(x) for x in hit[1]]
+    out = _web_research(query, n)
+    if out:
+        WEB_CACHE[key] = (time.time(), [dict(x) for x in out])
+        if len(WEB_CACHE) > 300:
+            WEB_CACHE.pop(next(iter(WEB_CACHE)))
+    return out
+
+
+def _web_research(query, n=3):
     sources = []
     if OLLAMA_API_KEY:
         try:
@@ -580,7 +820,7 @@ def web_research(query, n=3):
         except Exception:
             sources = []
     if not sources:
-        results = _ddg(query)
+        results = (_searx(query) if SEARX else []) or _ddg(query)
         results.sort(key=lambda r: 0 if any(d in urllib.parse.urlparse(r["url"]).netloc for d in TRUSTED) else 1)
 
         def grab(r):
@@ -738,7 +978,7 @@ def scan_self(acct):
     sys.path.insert(0, HERE)
     import agent  # noqa: E402  (agent.py sits next to this file)
     as_root = hasattr(os, "geteuid") and os.geteuid() == 0
-    rep = agent.check(as_root)
+    rep = agent.full_check(as_root)
     rep["services"] = [s for s in rep["services"] if s.get("port") != PORT]
     rep["findings"] = [f for f in rep["findings"] if f.get("asset") != f"svc:{PORT}"]
     rep["hostname"] = f"{rep['hostname']} (this laptop)"
@@ -752,11 +992,19 @@ LOCAL_ONLY = ("For safety, 'Scan this laptop' only works on the laptop running I
               "To check another machine, use 'Connect a server'.")
 STATIC = {"/app.js": ("app.js", "application/javascript; charset=utf-8"),
           "/theme.css": ("theme.css", "text/css; charset=utf-8"),
-          "/agent.py": ("agent.py", "text/x-python; charset=utf-8")}
+          "/agent.py": ("agent.py", "text/x-python; charset=utf-8"),
+          "/playbook.json": ("playbook.json", "application/json; charset=utf-8"),
+          "/privacy": ("privacy.html", "text/html; charset=utf-8"),
+          "/terms": ("terms.html", "text/html; charset=utf-8")}
+
+
+def agent_sha256():
+    with open(os.path.join(HERE, "agent.py"), "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 class H(BaseHTTPRequestHandler):
-    server_version = "InfraSentinel/0.2"
+    server_version = "InfraSentinel/" + VERSION
 
     def _send(self, code, body, ctype="application/json", headers=None):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -765,6 +1013,11 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if self.headers.get("X-Forwarded-Proto") == "https" or self.headers.get("Cf-Connecting-Ip"):
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -781,6 +1034,16 @@ class H(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def _stream_ai(self, acct, body):
+        try:
+            ai_slot()
+        except AIBusy as e:
+            return self._send(503, {"error": str(e)})
+        try:
+            return self._stream_ai_locked(acct, body)
+        finally:
+            AI_SLOTS.release()
+
+    def _stream_ai_locked(self, acct, body):
         try:
             model = ai_model()
             sources, web_state = [], "off"
@@ -897,6 +1160,10 @@ class H(BaseHTTPRequestHandler):
         return bool(self.headers.get("Cf-Connecting-Ip") or self.headers.get("X-Forwarded-For")) or \
             self.client_address[0] not in ("127.0.0.1", "::1")
 
+    def _ip(self):
+        return self.headers.get("Cf-Connecting-Ip") or (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip() \
+            or self.client_address[0]
+
     def _ai_allowed(self, acct):
         if not PUBLIC_URL or not self._remote():
             return True
@@ -912,10 +1179,14 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path in STATIC:
             return self._file(*STATIC[path])
+        if path == "/agent.py.sha256":
+            return self._send(200, (agent_sha256() + "  agent.py\n").encode(), "text/plain; charset=utf-8")
+        if path == "/api/health":
+            return self._send(200, {"ok": True, "version": VERSION})
         email, acct = self._session()
         if path == "/api/config":
             org = jload(ACCOUNTS_FILE, {}).get(acct, {}).get("name") if acct else None
-            return self._send(200, {"public": bool(PUBLIC_URL), "show_demo": not PUBLIC_URL,
+            return self._send(200, {"public": bool(PUBLIC_URL), "show_demo": not PUBLIC_URL, "version": VERSION, "weights": WEIGHTS,
                                     "signed_in": {"email": email, "org": org} if email else None})
         if path == "/login":
             return self._file("login.html", "text/html; charset=utf-8")   # always show it, so you can switch accounts
@@ -928,8 +1199,14 @@ class H(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             return self._file("index.html", "text/html; charset=utf-8")
         if path == "/api/me":
+            u = jload(USERS_FILE, {}).get(email, {})
             return self._send(200, {"email": email, "org": a.get("name"), "type": a.get("type"),
-                                    "plan": a.get("plan", "free"), "billing": a.get("billing", "monthly")})
+                                    "plan": a.get("plan", "free"), "billing": a.get("billing", "monthly"),
+                                    "two_factor": bool(u.get("totp")), "contact": a.get("contact") or {},
+                                    "token_created": a.get("token_created") or a.get("created")})
+        if path == "/api/account/export":
+            return self._send(200, account_export(email, acct), headers={
+                "Content-Disposition": 'attachment; filename="infrasentinel-my-data.json"'})
         if path == "/api/orgs":
             orgs = load_orgs()
             return self._send(200, {"organizations": orgs, "remediation": jload(state_file(acct), {})})
@@ -939,7 +1216,9 @@ class H(BaseHTTPRequestHandler):
         if path == "/api/agent/info":
             urls = ([PUBLIC_URL] if PUBLIC_URL else []) + ([f"http://{lan_ip()}:{PORT}"] if LAN else [])
             urls.append(f"http://127.0.0.1:{PORT}")
-            return self._send(200, {"token": a.get("token"), "urls": urls, "lan": LAN, "public": bool(PUBLIC_URL)})
+            return self._send(200, {"token": a.get("token"), "urls": urls, "lan": LAN, "public": bool(PUBLIC_URL),
+                                    "sha256": agent_sha256(), "exe_url": AGENT_EXE_URL,
+                                    "token_created": a.get("token_created") or a.get("created")})
         if path == "/api/scan" and self._remote():
             return self._send(403, {"error": LOCAL_ONLY})
         if path == "/api/scan":
@@ -974,13 +1253,29 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {"scan": agent_poll(acct, self._body().get("agent_id"))})
             if path == "/api/login":
                 b = self._body()
-                email = check_login(str(b.get("email", "")), str(b.get("password", "")))
+                who = str(b.get("email", "")).strip().lower()
+                keys = ("e:" + who, "i:" + self._ip())
+                if too_many(*keys):
+                    return self._send(429, {"error": "Too many wrong attempts. For your safety, wait 15 minutes and try again."})
+                email = check_login(who, str(b.get("password", "")))
                 if not email:
+                    note_fail(*keys)
                     time.sleep(0.5)
                     return self._send(401, {"error": "That email and password don't match. Check them and try again."})
+                secret = jload(USERS_FILE, {}).get(email, {}).get("totp")
+                if secret:
+                    if not str(b.get("code", "")).strip():
+                        return self._send(401, {"need_code": True, "error": "Enter the 6-digit code from your authenticator app."})
+                    if not totp_ok(secret, b.get("code")):
+                        note_fail(*keys)
+                        return self._send(401, {"need_code": True, "error": "That code didn't work. Check the time on your phone and try the newest code."})
+                FAILS.pop(keys[0], None)
                 self._end_session()
                 return self._send(200, {"ok": True}, headers=self._login_cookie(email))
             if path == "/api/signup":
+                if too_many("i:" + self._ip()):
+                    return self._send(429, {"error": "Too many attempts from your network. Please wait 15 minutes."})
+                note_fail("i:" + self._ip())       # counts sign-ups too, so one address can't create endless accounts
                 b = self._body()
                 if not str(b.get("org", "")).strip():
                     return self._send(400, {"error": "Enter your organization's name."})
@@ -998,32 +1293,89 @@ class H(BaseHTTPRequestHandler):
                 return self._send(401, {"error": "Please sign in."})
             if path == "/api/remediation":
                 b = self._body()
-                st = jload(state_file(acct), {})
-                st[str(b["org"]) + "/" + str(b["id"])] = {"status": b.get("status"), "evidence": str(b.get("evidence", ""))[:300]}
-                jsave(state_file(acct), st)
+                with STORE:
+                    st = jload(state_file(acct), {})
+                    st[str(b["org"]) + "/" + str(b["id"])] = {"status": b.get("status"), "evidence": str(b.get("evidence", ""))[:300],
+                                                              "at": int(time.time())}
+                    jsave(state_file(acct), st)
                 return self._send(200, {"ok": True})
+            if path == "/api/2fa/setup":
+                secret = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+                with STORE:
+                    users = jload(USERS_FILE, {})
+                    users[email]["totp_pending"] = secret
+                    jsave(USERS_FILE, users)
+                label = urllib.parse.quote(f"InfraSentinel:{email}")
+                return self._send(200, {"secret": secret, "uri": f"otpauth://totp/{label}?secret={secret}&issuer=InfraSentinel&digits=6&period=30"})
+            if path == "/api/2fa/enable":
+                code = self._body().get("code")
+                with STORE:
+                    users = jload(USERS_FILE, {})
+                    pend = users[email].get("totp_pending")
+                    if not totp_ok(pend, code):
+                        return self._send(400, {"error": "That code didn't match. Type the newest 6-digit code from the app."})
+                    users[email]["totp"] = pend
+                    users[email].pop("totp_pending", None)
+                    jsave(USERS_FILE, users)
+                return self._send(200, {"ok": True})
+            if path == "/api/2fa/disable" or path == "/api/password" or path == "/api/account/delete":
+                b = self._body()
+                if not check_login(email, str(b.get("password", ""))):
+                    note_fail("e:" + email)
+                    return self._send(403, {"error": "Your current password is not correct."})
+                if path == "/api/2fa/disable":
+                    with STORE:
+                        users = jload(USERS_FILE, {})
+                        users[email].pop("totp", None)
+                        jsave(USERS_FILE, users)
+                    return self._send(200, {"ok": True})
+                if path == "/api/password":
+                    new = str(b.get("new", ""))
+                    if len(new) < 10:
+                        return self._send(400, {"error": "Use a new password of at least 10 characters."})
+                    with STORE:
+                        users = jload(USERS_FILE, {})
+                        users[email]["salt"], users[email]["hash"] = hash_pw(new)
+                        jsave(USERS_FILE, users)
+                    c = SimpleCookie(self.headers.get("Cookie", ""))
+                    end_sessions(email, keep=c["is_session"].value if "is_session" in c else None)   # sign out everywhere else
+                    return self._send(200, {"ok": True})
+                account_delete(email, acct)
+                return self._send(200, {"ok": True}, headers={"Set-Cookie": "is_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"})
+            if path == "/api/contact":
+                b = self._body()
+                c = {k: str(b.get(k, "")).strip()[:120] for k in ("name", "phone", "email")}
+                with STORE:
+                    accts = jload(ACCOUNTS_FILE, {})
+                    accts[acct]["contact"] = c if any(c.values()) else {}
+                    jsave(ACCOUNTS_FILE, accts)
+                return self._send(200, {"ok": True, "contact": accts[acct]["contact"]})
             if path == "/api/plan":
                 b = self._body()
                 plan, billing = str(b.get("plan", "")), str(b.get("billing", "monthly"))
                 if plan not in ("free", "starter", "pro") or billing not in ("monthly", "yearly"):
                     return self._send(400, {"error": "Unknown plan."})
-                accts = jload(ACCOUNTS_FILE, {})
-                accts[acct]["plan"], accts[acct]["billing"] = plan, billing
-                jsave(ACCOUNTS_FILE, accts)
+                with STORE:
+                    accts = jload(ACCOUNTS_FILE, {})
+                    accts[acct]["plan"], accts[acct]["billing"] = plan, billing
+                    jsave(ACCOUNTS_FILE, accts)
                 return self._send(200, {"ok": True, "plan": plan, "billing": billing})
             if path == "/api/hosts/scan-now":
                 request_scan(acct, self._body().get("id"))
                 return self._send(200, {"ok": True})
             if path == "/api/hosts/remove":
                 b = self._body()
-                hosts = jload(hosts_file(acct), {})
-                hosts.pop(str(b.get("id")), None)
-                jsave(hosts_file(acct), hosts)
+                with STORE:
+                    hosts = jload(hosts_file(acct), {})
+                    hosts.pop(str(b.get("id")), None)
+                    jsave(hosts_file(acct), hosts)
                 return self._send(200, {"ok": True})
             if path == "/api/agent/reset-token":
-                accts = jload(ACCOUNTS_FILE, {})
-                accts[acct]["token"] = secrets.token_urlsafe(18)
-                jsave(ACCOUNTS_FILE, accts)
+                with STORE:
+                    accts = jload(ACCOUNTS_FILE, {})
+                    accts[acct]["token"] = secrets.token_urlsafe(18)
+                    accts[acct]["token_created"] = int(time.time())
+                    jsave(ACCOUNTS_FILE, accts)
                 return self._send(200, {"ok": True, "token": accts[acct]["token"]})
             if path == "/api/scan-self":
                 if self._remote():
@@ -1058,9 +1410,10 @@ class H(BaseHTTPRequestHandler):
                     return self._send(503, {"error": AI_OFF})
                 if want not in names:
                     return self._send(400, {"error": f"That model isn't downloaded yet. Run: ollama pull {want}"})
-                st = jload(SETTINGS_FILE, {})
-                st["model"] = want
-                jsave(SETTINGS_FILE, st)
+                with STORE:
+                    st = jload(SETTINGS_FILE, {})
+                    st["model"] = want
+                    jsave(SETTINGS_FILE, st)
                 return self._send(200, {"ok": True, "current": want})
         except ValueError as e:
             return self._send(400, {"error": str(e)})
@@ -1074,9 +1427,16 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     os.makedirs(DATA, exist_ok=True)
+    if "--reset-password" in sys.argv:
+        i = sys.argv.index("--reset-password")
+        if i + 1 >= len(sys.argv):
+            sys.exit("Usage: python3 server.py --reset-password EMAIL")
+        reset_password_cli(sys.argv[i + 1])
+        sys.exit(0)
     made = ensure_demo()
     url = f"http://127.0.0.1:{PORT}/login"
-    print(f"InfraSentinel running at {url}  (Ctrl+C to stop)")
+    print(f"InfraSentinel {VERSION} running at {url}  (Ctrl+C to stop)")
+    print(f"Data: {DB_FILE}" + ("  (encrypted)" if _cipher() else ""))
     if LAN:
         print(f"Other machines on your network can connect at http://{lan_ip()}:{PORT}")
     if PUBLIC_URL:

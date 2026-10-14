@@ -1,0 +1,24 @@
+# systemd service: keeps InfraSentinel running after crashes and reboots.
+# Installed by deploy/install-service.sh (edit User and paths there if needed).
+[Unit]
+Description=InfraSentinel security dashboard
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=IS_PORT=8765
+# Environment=IS_BIND=0.0.0.0
+# Environment=IS_ENCRYPT=1
+# Environment=IS_PUBLIC_URL=https://scan.yourdomain.com
+ExecStart=/usr/bin/python3 __DIR__/server.py --no-browser
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

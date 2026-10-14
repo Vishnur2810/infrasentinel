@@ -1,0 +1,8 @@
+data/*
+!data/organizations.json
+bin/
+docs/
+tests/
+.git/
+__pycache__/
+*.log
